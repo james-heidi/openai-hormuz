@@ -107,12 +107,16 @@ function reducer(state, action) {
       const patches = Array.isArray(summary?.patches)
         ? summary.patches.map(resultFromPatch)
         : [];
+      const rescanResults = Array.isArray(summary?.rescan_summary?.findings)
+        ? summary.rescan_summary.findings.map(resultFromFinding).filter(Boolean)
+        : null;
       const nextScore = summary?.rescan_summary?.score;
       const failures = summary?.failures ?? [];
       return {
         ...state,
         results: [
-          ...state.results.filter((result) => result?.metadata?.kind !== 'patch'),
+          ...(rescanResults
+            ?? state.results.filter((result) => result?.metadata?.kind !== 'patch')),
           ...patches,
         ],
         prevScore: typeof nextScore === 'number' ? state.score : state.prevScore,
