@@ -1,4 +1,5 @@
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -8,22 +9,37 @@ from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.application.rule_catalog import default_agents
 from modules.scan.domain.entities import ScanRequest, Severity
+from modules.scan.domain.errors import ScanConfigurationError
+
+
+@dataclass(frozen=True)
+class StaticRuntimeSettings:
+    scan_allowed_roots: list[Path]
+    openai_configured: bool = True
+
+    def validate_for_scan(self) -> None:
+        if not self.openai_configured:
+            raise ScanConfigurationError(
+                code="missing_openai_config",
+                message="OPENAI_API_KEY is required to run scans.",
+            )
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_finds_demo_target_violations(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None:
     demo_target = tmp_path / "openai-hormuz-demo-repo"
     _write_demo_fixture(demo_target)
     scan_storage = tmp_path / "scan-workspaces"
-    monkeypatch.setenv("SCAN_ALLOWED_ROOTS", str(tmp_path))
     events: list[dict] = []
 
     async def emit(event: dict) -> None:
         events.append(event)
 
-    summary = await ScanOrchestrator(default_agents(), GitRepositoryPreparer(scan_storage)).run(
+    summary = await ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(scan_storage),
+        StaticRuntimeSettings([tmp_path]),
+    ).run(
         ScanRequest(repo_path=str(demo_target)),
         emit,
     )
@@ -43,8 +59,31 @@ async def test_orchestrator_rejects_paths_outside_allowed_roots() -> None:
         return None
 
     with pytest.raises(RepositoryPreparationError, match="outside the configured scan roots"):
-        await ScanOrchestrator(default_agents(), GitRepositoryPreparer()).run(
+        await ScanOrchestrator(
+            default_agents(),
+            GitRepositoryPreparer(),
+            StaticRuntimeSettings([Path.cwd()]),
+        ).run(
             ScanRequest(repo_path="/"),
+            emit,
+        )
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_rejects_missing_openai_config(tmp_path: Path) -> None:
+    demo_target = tmp_path / "openai-hormuz-demo-repo"
+    _write_demo_fixture(demo_target)
+
+    async def emit(_event: dict) -> None:
+        return None
+
+    with pytest.raises(ScanConfigurationError, match="OPENAI_API_KEY"):
+        await ScanOrchestrator(
+            default_agents(),
+            GitRepositoryPreparer(),
+            StaticRuntimeSettings([tmp_path], openai_configured=False),
+        ).run(
+            ScanRequest(repo_path=str(demo_target)),
             emit,
         )
 

@@ -6,6 +6,7 @@ from modules.scan import get_scan_orchestrator
 from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.domain.entities import ErrorDetail, ScanRequest, ScanSummary
+from modules.scan.domain.errors import ScanConfigurationError
 
 router = APIRouter(tags=["scan"])
 
@@ -20,6 +21,11 @@ async def preview_scan(
 
     try:
         return await orchestrator.run(request, emit)
+    except ScanConfigurationError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorDetail(code=exc.code, message=str(exc)).model_dump(),
+        ) from exc
     except RepositoryPreparationError as exc:
         raise HTTPException(
             status_code=400,
@@ -43,6 +49,14 @@ async def scan_socket(
         await orchestrator.run(request, emit)
     except WebSocketDisconnect:
         return
+    except ScanConfigurationError as exc:
+        await emit(
+            {
+                "type": "error",
+                "detail": ErrorDetail(code=exc.code, message=str(exc)).model_dump(),
+            }
+        )
+        await websocket.close(code=1011)
     except ValidationError as exc:
         await emit(
             {

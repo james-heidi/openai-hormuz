@@ -13,6 +13,7 @@ feature-sliced React, OpenAPI sync, and architecture notes under
 
 ```bash
 cp .env.example .env
+# Fill OPENAI_API_KEY in .env before starting a scan.
 task install
 
 # Optional local infra for Redis and tracing
@@ -33,6 +34,25 @@ task fe:dev
 | Backend | http://localhost:4000 | `task be:dev` |
 | Backend health | http://localhost:4000/api/health | `task be:dev` |
 | Jaeger UI | http://localhost:16686 | `task infra:up` |
+
+## Backend Environment
+
+The root `Taskfile.yml` loads `.env.local` and `.env` before starting backend
+tasks. FastAPI app code does not load dotenv files directly.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Yes for scans | OpenAI credential used by the Agents SDK scan flow. Missing or placeholder values return `missing_openai_config` when a scan starts. |
+| `OPENAI_AGENT_MODEL` | No | Optional Agents SDK model override. Leave unset to use SDK defaults. |
+| `OPENAI_PROJECT` | No | Optional OpenAI project header for API calls. |
+| `OPENAI_ORG_ID` | No | Optional OpenAI organization header for API calls. |
+| `OPENAI_BASE_URL` | No | Optional OpenAI-compatible API base URL. |
+| `SCAN_ALLOWED_ROOTS` | No | Colon-separated directories the scanner may read. Defaults to this repo root. |
+| `SCAN_WORKTREE_ROOT` | No | Directory reserved for GitPython worktree operations. Defaults to `.worktrees`. |
+| `CORS_ORIGINS` | No | Comma-separated frontend origins. Defaults to `http://localhost:3000`. |
+| `GITHUB_TOKEN` | No | Enables optional GitHub PR creation only when paired with `GITHUB_REPOSITORY`. |
+| `GITHUB_REPOSITORY` | No | Repository slug for optional PR creation, for example `owner/repo`. |
+| `GITHUB_BASE_BRANCH` | No | Base branch for optional PR creation. Defaults to `main`. |
 
 ## Repository Layout
 
