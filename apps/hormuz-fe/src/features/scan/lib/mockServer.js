@@ -1,12 +1,4 @@
-import { EVT, AGENT_STATUSES } from './protocol';
-
-/**
- * In-process mock that emits the same wire protocol the real backend
- * would. Lets `npm run dev` work standalone with no orchestrator running.
- *
- * Deterministic schedule so demo recordings look the same every take.
- * `VITE_MOCK_SPEED=fast` halves all timings.
- */
+import { AGENT_STATUSES, EVT } from './protocol';
 
 const SPEED =
   typeof import.meta !== 'undefined' &&
@@ -16,20 +8,28 @@ const SPEED =
 
 const t = (ms) => Math.round(ms * SPEED);
 
-const AGENTS = [
-  { id: 'agent-a', label: 'Agent A' },
-  { id: 'agent-b', label: 'Agent B' },
-  { id: 'agent-c', label: 'Agent C' },
-];
+const AGENTS = ['Agent A', 'Agent B', 'Agent C'];
 
-const SAMPLE_RESULTS = [
-  { agentId: 'agent-a', severity: 'high', title: 'Sample finding 1', location: 'src/sample/a1.ext:12' },
-  { agentId: 'agent-b', severity: 'medium', title: 'Sample finding 2', location: 'src/sample/b1.ext:48' },
-  { agentId: 'agent-a', severity: 'critical', title: 'Sample finding 3', location: 'src/sample/a2.ext:7' },
-  { agentId: 'agent-c', severity: 'low', title: 'Sample finding 4', location: 'src/sample/c1.ext:101' },
-  { agentId: 'agent-b', severity: 'high', title: 'Sample finding 5', location: 'src/sample/b2.ext:30' },
-  { agentId: 'agent-c', severity: 'medium', title: 'Sample finding 6', location: 'src/sample/c2.ext:64' },
-];
+const SAMPLE_FINDINGS = [
+  { agent: 'Agent A', severity: 'high', title: 'Sample finding 1', file_path: 'src/sample/a1.ext', line: 12 },
+  { agent: 'Agent B', severity: 'medium', title: 'Sample finding 2', file_path: 'src/sample/b1.ext', line: 48 },
+  { agent: 'Agent A', severity: 'critical', title: 'Sample finding 3', file_path: 'src/sample/a2.ext', line: 7 },
+  { agent: 'Agent C', severity: 'low', title: 'Sample finding 4', file_path: 'src/sample/c1.ext', line: 101 },
+  { agent: 'Agent B', severity: 'high', title: 'Sample finding 5', file_path: 'src/sample/b2.ext', line: 30 },
+  { agent: 'Agent C', severity: 'medium', title: 'Sample finding 6', file_path: 'src/sample/c2.ext', line: 64 },
+].map((finding, index) => ({
+  id: `mock:${index + 1}`,
+  violation_type: `MOCK_${index + 1}`,
+  category: 'mock',
+  context: null,
+  description: 'Mock finding emitted by the in-process mock server.',
+  snippet: null,
+  regulations: [],
+  regulation_warning: null,
+  recommendation: 'Review the mock finding.',
+  remediation_hint: 'Review the mock finding.',
+  ...finding,
+}));
 
 export function createMockServer() {
   const subscribers = new Set();
@@ -38,7 +38,7 @@ export function createMockServer() {
   const emit = (type, payload) => {
     for (const cb of subscribers) {
       try {
-        cb({ type, payload });
+        cb({ type, ...payload });
       } catch (err) {
         console.error('[mockServer] subscriber threw', err);
       }
@@ -58,73 +58,51 @@ export function createMockServer() {
     timers.clear();
   };
 
-  const playRun = (runId) => {
+  const playRun = (repoPath) => {
     clearAll();
 
-    schedule(0, () =>
-      emit(EVT.RUN_ACCEPTED, { runId, agents: AGENTS }),
-    );
+    schedule(0, () => emit(EVT.SCAN_STARTED, { repo_path: repoPath, agents: AGENTS }));
 
     schedule(150, () => {
-      for (const a of AGENTS) {
-        emit(EVT.AGENT_STATUS, {
-          runId,
-          agentId: a.id,
-          status: AGENT_STATUSES.RUNNING,
+      for (const agent of AGENTS) {
+        emit(EVT.AGENT_UPDATE, {
+          update: { agent, status: AGENT_STATUSES.RUNNING, message: 'Scanning', progress: 5 },
         });
       }
     });
 
-    const RESULT_TIMINGS = [800, 1300, 1800, 2700, 3400, 4100];
-    SAMPLE_RESULTS.forEach((r, i) => {
-      schedule(RESULT_TIMINGS[i], () =>
-        emit(EVT.RESULT_ADD, {
-          runId,
-          agentId: r.agentId,
-          result: {
-            id: `${runId}_r${i + 1}`,
-            agentId: r.agentId,
-            title: r.title,
-            description: 'Mock finding emitted by the in-process mock server.',
-            severity: r.severity,
-            location: r.location,
-            metadata: {},
-          },
-        }),
-      );
+    const resultTimings = [800, 1300, 1800, 2700, 3400, 4100];
+    SAMPLE_FINDINGS.forEach((finding, index) => {
+      schedule(resultTimings[index], () => emit(EVT.FINDING, { finding }));
     });
-
-    schedule(2200, () =>
-      emit(EVT.SCORE_UPDATE, { runId, score: 50 }),
-    );
-    schedule(5300, () =>
-      emit(EVT.SCORE_UPDATE, { runId, score: 72 }),
-    );
 
     schedule(5500, () => {
-      for (const a of AGENTS) {
-        emit(EVT.AGENT_STATUS, {
-          runId,
-          agentId: a.id,
-          status: AGENT_STATUSES.DONE,
+      for (const agent of AGENTS) {
+        emit(EVT.AGENT_UPDATE, {
+          update: { agent, status: AGENT_STATUSES.DONE, message: 'Scan complete', progress: 100 },
         });
       }
     });
 
-    schedule(5700, () => emit(EVT.RUN_COMPLETE, { runId }));
+    schedule(5700, () =>
+      emit(EVT.SCAN_COMPLETE, {
+        summary: {
+          scan_status: 'complete',
+          score: 72,
+          total_findings: SAMPLE_FINDINGS.length,
+          counts_by_severity: { critical: 1, high: 2, medium: 2, low: 1 },
+          counts_by_agent: { 'Agent A': 2, 'Agent B': 2, 'Agent C': 2 },
+          findings: SAMPLE_FINDINGS,
+          failed_agents: [],
+        },
+      }),
+    );
   };
 
   return {
-    /** Mock-side `send` mirrors a real WS client → server message. */
     send(msg) {
       if (!msg || typeof msg !== 'object') return;
-      if (msg.type === EVT.RUN_START) {
-        playRun(msg.payload?.runId ?? `mock_${Date.now()}`);
-      } else if (msg.type === EVT.RUN_CANCEL) {
-        clearAll();
-      } else if (msg.type === EVT.ACTION_INVOKE) {
-        // No-op in the generic mock; a domain mock would respond here.
-      }
+      if (msg.repo_path) playRun(msg.repo_path);
     },
     subscribe(cb) {
       subscribers.add(cb);

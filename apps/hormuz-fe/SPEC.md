@@ -114,28 +114,27 @@ Generic components must not interpret compliance metadata. Domain components may
 
 ## 7. Wire Protocol
 
-Source of truth: `src/lib/protocol.js`. Export event constants as `EVT.*` and document payloads with JSDoc typedefs.
+Source of truth: the backend realtime contract in `docs/architecture/realtime-contract.md`.
+`src/lib/protocol.js` mirrors the backend event names for frontend reducer use.
 
 ### 7.1 Client to server
 
 | Type | Payload | Description |
 | --- | --- | --- |
-| `run.start` | `{ runId, input }` | Starts a scan. |
-| `run.cancel` | `{ runId }` | Cancels the active scan. |
-| `action.invoke` | `{ runId, actionId, params? }` | Invokes a finding or remediation action. |
+| request body | `{ repo_path }` | First WebSocket message starts a scan. |
 
 ### 7.2 Server to client
 
 | Type | Payload |
 | --- | --- |
-| `run.accepted` | `{ runId, agents: [{ id, label }] }` |
-| `agent.status` | `{ runId, agentId, status, message?, progress? }` |
-| `result.add` | `{ runId, agentId, result }` |
-| `score.update` | `{ runId, score, prev? }` |
-| `run.complete` | `{ runId, summary? }` |
-| `run.error` | `{ runId, error }` |
+| `scan_started` | `{ repo_path, agents }` |
+| `agent_update` | `{ update: { agent, status, message, progress } }` |
+| `finding` | `{ finding }` |
+| `scan_complete` | `{ summary }` |
+| `error` | `{ detail: { code, message } }` |
 
-`agent.status.status` is one of `idle`, `running`, `done`, or `error`. `progress` is a number from `0` to `1`.
+`agent_update.update.status` is one of `idle`, `running`, `done`, or `error`.
+Backend progress is `0` to `100`; the UI normalizes it to `0` to `1`.
 
 ### 7.3 Result shape
 
@@ -216,12 +215,12 @@ The reducer must ignore any server event whose `runId` does not match `state.run
 | Action | Effect |
 | --- | --- |
 | `RUN_REQUESTED` | Clears previous run data and sets `status` to `running`. |
-| `RUN_ACCEPTED` | Initializes the agent map. |
+| `SCAN_STARTED` | Initializes the agent map. |
 | `AGENT_STATUS` | Updates one agent. |
-| `RESULT_ADD` | Appends a result. |
-| `SCORE_UPDATE` | Stores `prevScore` and updates `score`. |
-| `RUN_COMPLETE` | Sets `status` to `complete`. |
-| `RUN_ERROR` | Sets `status` to `error` and stores the error. |
+| `FINDING` | Appends a finding result. |
+| `SCAN_COMPLETE` | Sets `status` to `complete` and stores the summary. |
+| `ERROR` | Sets `status` to `error` and stores the error. |
+| `FIXES_GENERATED` | Appends REST-generated patch results. |
 
 ## 9. Components
 
@@ -288,15 +287,15 @@ useWebSocket({ url, onMessage, enabled = true, mock = false })
 
 Behavior:
 
-- Connects to `VITE_WS_URL` when provided.
+- Connects to `VITE_WS_URL` when provided, otherwise `/ws/scan` on the current host.
 - Reconnects with bounded exponential backoff.
-- Falls back to mock mode when explicitly requested, when no URL is configured, or when reconnect attempts are exhausted.
+- Falls back to mock mode when explicitly requested or when reconnect attempts are exhausted.
 - Drops outgoing messages while disconnected and logs a warning.
 
 Mock mode decision:
 
 ```js
-const useMock = import.meta.env.VITE_USE_MOCK === '1' || !import.meta.env.VITE_WS_URL;
+const useMock = import.meta.env.VITE_USE_MOCK === '1';
 ```
 
 ### 10.2 `useRunState`
@@ -315,14 +314,11 @@ Expected generic stream:
 
 | Step | Event | Notes |
 | --- | --- | --- |
-| 1 | `run.accepted` | Three agents. |
-| 2 | `agent.status` | Agents enter `running`. |
-| 3 | `result.add` | Findings stream incrementally. |
-| 4 | `score.update` | Initial score. |
-| 5 | `result.add` | More findings. |
-| 6 | `score.update` | Updated score. |
-| 7 | `agent.status` | Agents enter `done`. |
-| 8 | `run.complete` | Run finishes. |
+| 1 | `scan_started` | Three agents. |
+| 2 | `agent_update` | Agents enter `running`. |
+| 3 | `finding` | Findings stream incrementally. |
+| 4 | `agent_update` | Agents enter `done`. |
+| 5 | `scan_complete` | Run finishes with summary score. |
 
 Optional environment setting:
 
@@ -363,12 +359,12 @@ Tone helpers should map severity to Tailwind classes for background, text, and b
 ## 13. Acceptance Criteria
 
 - `npm run dev` starts without errors.
-- With no `VITE_WS_URL`, the app enters mock mode and the full scan flow works.
+- With no `VITE_WS_URL`, the app connects to `/ws/scan` on the current host.
 - With an unreachable `VITE_WS_URL`, the app retries and then falls back to mock mode.
 - Starting a scan shows agents running, streams findings, updates the score, and completes the run.
 - Results are sorted by severity and keep stable ordering within the same severity.
 - `ViolationCard` renders GDPR and APP metadata from the result payload.
-- `FixPanel` sends `action.invoke` for bulk and result-level remediation actions.
+- `FixPanel` calls the REST fix endpoint for bulk and result-level remediation actions.
 - Patch results render through `DiffView`.
 - Re-running a scan clears previous state and ignores stale events.
 - Console output has no runtime errors during the main flow.

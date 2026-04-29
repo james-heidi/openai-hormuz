@@ -1,12 +1,5 @@
-import { useReducer, useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useReducer } from 'react';
 import { EVT, RUN_STATUSES } from '../lib/protocol';
-
-/**
- * Single source of truth for the run lifecycle. The reducer is the only
- * place that mutates state, and the only place that filters incoming WS
- * events by `runId` — preventing stale messages from a previous run from
- * leaking into a new one when the user re-clicks Run.
- */
 
 const newRunId = () =>
   `run_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -19,21 +12,19 @@ const initialState = Object.freeze({
   score: null,
   prevScore: null,
   error: null,
+  summary: null,
 });
 
 const ACTIONS = Object.freeze({
   RUN_REQUESTED: 'RUN_REQUESTED',
-  RUN_ACCEPTED: 'RUN_ACCEPTED',
-  AGENT_STATUS: 'AGENT_STATUS',
-  RESULT_ADD: 'RESULT_ADD',
-  SCORE_UPDATE: 'SCORE_UPDATE',
-  RUN_COMPLETE: 'RUN_COMPLETE',
-  RUN_ERROR: 'RUN_ERROR',
+  SCAN_STARTED: 'SCAN_STARTED',
+  AGENT_UPDATE: 'AGENT_UPDATE',
+  FINDING: 'FINDING',
+  SCAN_COMPLETE: 'SCAN_COMPLETE',
+  ERROR: 'ERROR',
+  FIXES_GENERATED: 'FIXES_GENERATED',
   RESET: 'RESET',
 });
-
-const isStale = (state, payloadRunId) =>
-  state.runId !== null && payloadRunId && payloadRunId !== state.runId;
 
 function reducer(state, action) {
   switch (action.type) {
@@ -44,55 +35,94 @@ function reducer(state, action) {
         status: RUN_STATUSES.RUNNING,
       };
 
-    case ACTIONS.RUN_ACCEPTED: {
-      if (isStale(state, action.payload.runId)) return state;
+    case ACTIONS.SCAN_STARTED: {
       const agents = {};
-      for (const a of action.payload.agents ?? []) {
-        agents[a.id] = { id: a.id, label: a.label, status: 'idle' };
+      for (const name of action.event.agents ?? []) {
+        const id = agentId(name);
+        agents[id] = { id, label: name, status: 'idle' };
       }
-      return { ...state, agents };
+      return {
+        ...state,
+        agents,
+      };
     }
 
-    case ACTIONS.AGENT_STATUS: {
-      const { runId, agentId, status, message, progress } = action.payload;
-      if (isStale(state, runId)) return state;
-      const prev = state.agents[agentId] ?? { id: agentId, label: agentId };
+    case ACTIONS.AGENT_UPDATE: {
+      const update = action.event.update;
+      if (!update?.agent) return state;
+      const id = agentId(update.agent);
+      const prev = state.agents[id] ?? { id, label: update.agent };
       return {
         ...state,
         agents: {
           ...state.agents,
-          [agentId]: { ...prev, status, message, progress },
+          [id]: {
+            ...prev,
+            label: update.agent,
+            status: update.status,
+            message: update.message,
+            progress: normalizeProgress(update.progress),
+          },
         },
       };
     }
 
-    case ACTIONS.RESULT_ADD: {
-      const { runId, result } = action.payload;
-      if (isStale(state, runId)) return state;
-      if (!result?.id) return state;
-      // Dedupe on id in case the BE re-sends.
-      if (state.results.some((r) => r.id === result.id)) return state;
-      return { ...state, results: [...state.results, result] };
+    case ACTIONS.FINDING: {
+      const result = resultFromFinding(action.event.finding);
+      if (!result?.id || state.results.some((item) => item.id === result.id)) return state;
+      return {
+        ...state,
+        results: [...state.results, result],
+      };
     }
 
-    case ACTIONS.SCORE_UPDATE: {
-      if (isStale(state, action.payload.runId)) return state;
-      const next = action.payload.score;
-      if (typeof next !== 'number') return state;
-      return { ...state, prevScore: state.score, score: next };
+    case ACTIONS.SCAN_COMPLETE: {
+      const summary = action.event.summary;
+      if (!summary) return state;
+      const results = Array.isArray(summary.findings)
+        ? summary.findings.map(resultFromFinding).filter(Boolean)
+        : state.results;
+      const failedAgents = summary.failed_agents ?? [];
+      return {
+        ...state,
+        status: summary.scan_status === 'failed' ? RUN_STATUSES.ERROR : RUN_STATUSES.COMPLETE,
+        score: summary.score,
+        summary,
+        results,
+        error: failedAgents.length
+          ? failedAgents.map((failure) => `${failure.agent}: ${failure.message}`).join('\n')
+          : null,
+      };
     }
 
-    case ACTIONS.RUN_COMPLETE:
-      if (isStale(state, action.payload.runId)) return state;
-      return { ...state, status: RUN_STATUSES.COMPLETE };
-
-    case ACTIONS.RUN_ERROR:
-      if (isStale(state, action.payload.runId)) return state;
+    case ACTIONS.ERROR:
       return {
         ...state,
         status: RUN_STATUSES.ERROR,
-        error: action.payload.error ?? 'Unknown error',
+        error: action.event.detail?.message ?? 'Unknown error',
       };
+
+    case ACTIONS.FIXES_GENERATED: {
+      const summary = action.summary;
+      const patches = Array.isArray(summary?.patches)
+        ? summary.patches.map(resultFromPatch)
+        : [];
+      const nextScore = summary?.rescan_summary?.score;
+      const failures = summary?.failures ?? [];
+      return {
+        ...state,
+        results: [
+          ...state.results.filter((result) => result?.metadata?.kind !== 'patch'),
+          ...patches,
+        ],
+        prevScore: typeof nextScore === 'number' ? state.score : state.prevScore,
+        score: typeof nextScore === 'number' ? nextScore : state.score,
+        summary: summary?.rescan_summary ?? state.summary,
+        error: failures.length
+          ? failures.map((failure) => failure.message).join('\n')
+          : state.error,
+      };
+    }
 
     case ACTIONS.RESET:
       return initialState;
@@ -103,22 +133,21 @@ function reducer(state, action) {
 }
 
 const EVT_TO_ACTION = Object.freeze({
-  [EVT.RUN_ACCEPTED]: ACTIONS.RUN_ACCEPTED,
-  [EVT.AGENT_STATUS]: ACTIONS.AGENT_STATUS,
-  [EVT.RESULT_ADD]: ACTIONS.RESULT_ADD,
-  [EVT.SCORE_UPDATE]: ACTIONS.SCORE_UPDATE,
-  [EVT.RUN_COMPLETE]: ACTIONS.RUN_COMPLETE,
-  [EVT.RUN_ERROR]: ACTIONS.RUN_ERROR,
+  [EVT.SCAN_STARTED]: ACTIONS.SCAN_STARTED,
+  [EVT.AGENT_UPDATE]: ACTIONS.AGENT_UPDATE,
+  [EVT.FINDING]: ACTIONS.FINDING,
+  [EVT.SCAN_COMPLETE]: ACTIONS.SCAN_COMPLETE,
+  [EVT.ERROR]: ACTIONS.ERROR,
 });
 
 export function useRunState() {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const handleEvent = useCallback((msg) => {
-    if (!msg || typeof msg !== 'object') return;
-    const actionType = EVT_TO_ACTION[msg.type];
+  const handleEvent = useCallback((event) => {
+    if (!event || typeof event !== 'object') return;
+    const actionType = EVT_TO_ACTION[event.type];
     if (!actionType) return;
-    dispatch({ type: actionType, payload: msg.payload ?? {} });
+    dispatch({ type: actionType, event });
   }, []);
 
   const runRequested = useCallback(() => {
@@ -127,14 +156,79 @@ export function useRunState() {
     return runId;
   }, []);
 
+  const fixesGenerated = useCallback((summary) => {
+    dispatch({ type: ACTIONS.FIXES_GENERATED, summary });
+  }, []);
+
   const reset = useCallback(() => {
     dispatch({ type: ACTIONS.RESET });
   }, []);
 
   const dispatchers = useMemo(
-    () => ({ handleEvent, runRequested, reset }),
-    [handleEvent, runRequested, reset],
+    () => ({ fixesGenerated, handleEvent, reset, runRequested }),
+    [fixesGenerated, handleEvent, reset, runRequested],
   );
 
   return [state, dispatchers];
+}
+
+function resultFromFinding(finding) {
+  if (!finding?.id) return null;
+  const id = agentId(finding.agent);
+  const regulations = Array.isArray(finding.regulations) ? finding.regulations : [];
+  return {
+    ...finding,
+    agentId: id,
+    location: finding.line ? `${finding.file_path}:${finding.line}` : finding.file_path,
+    metadata: {
+      kind: 'violation',
+      violationCode: finding.violation_type,
+      context: finding.context,
+      gdpr: regulations.find((regulation) => regulation.framework === 'GDPR'),
+      app: regulations.find((regulation) => regulation.framework === 'APP'),
+    },
+    actions: [{ label: 'Auto-fix', actionId: 'auto-fix' }],
+  };
+}
+
+function resultFromPatch(patch, index) {
+  if (!patch) return null;
+  const id = `patch:${patch.finding_id ?? index}:${index}`;
+  return {
+    id,
+    agentId: 'fix-generator',
+    title: `Patch for ${patch.file_path ?? patch.finding_id ?? 'finding'}`,
+    location: patch.file_path,
+    metadata: {
+      kind: 'patch',
+      file: patch.file_path,
+      diffLines: diffLines(patch.diff),
+      violationCode: patch.finding_id,
+    },
+    actions: [],
+  };
+}
+
+function diffLines(diff) {
+  if (!diff) return [];
+  return diff
+    .split('\n')
+    .filter((line) => line && !line.startsWith('+++') && !line.startsWith('---'))
+    .map((line) => {
+      if (line.startsWith('+')) return { type: '+', text: line.slice(1) };
+      if (line.startsWith('-')) return { type: '-', text: line.slice(1) };
+      return { type: ' ', text: line.startsWith(' ') ? line.slice(1) : line };
+    });
+}
+
+function normalizeProgress(progress) {
+  if (typeof progress !== 'number') return undefined;
+  return Math.max(0, Math.min(1, progress / 100));
+}
+
+function agentId(name) {
+  return String(name ?? 'agent')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'agent';
 }

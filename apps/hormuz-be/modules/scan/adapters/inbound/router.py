@@ -1,3 +1,5 @@
+from json import JSONDecodeError
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
@@ -61,7 +63,7 @@ async def generate_scan_fixes(
     return await generate_fixes(request, fix_generator)
 
 
-@router.websocket("/ws/scans")
+@router.websocket("/ws/scan")
 async def scan_socket(
     websocket: WebSocket,
     orchestrator: ScanOrchestrator = Depends(get_scan_orchestrator),
@@ -69,47 +71,75 @@ async def scan_socket(
     await websocket.accept()
 
     async def emit(event: dict) -> None:
-        await websocket.send_json(jsonable_encoder(event))
+        await _send_event(websocket, event)
 
     try:
-        payload = await websocket.receive_json()
-        request = ScanRequest.model_validate(payload)
+        request = await _receive_scan_request(websocket)
+        if request is None:
+            return
         await orchestrator.run(request, emit)
     except WebSocketDisconnect:
         return
     except ScanConfigurationError as exc:
-        await emit(
-            {
-                "type": "error",
-                "detail": ErrorDetail(code=exc.code, message=str(exc)).model_dump(),
-            }
-        )
-        await websocket.close(code=1011)
-    except ValidationError as exc:
-        await emit(
-            {
-                "type": "error",
-                "detail": ErrorDetail(
-                    code="invalid_scan_request",
-                    message=str(exc),
-                ).model_dump(),
-            }
-        )
+        await _send_error(websocket, exc.code, str(exc))
+        await _close_websocket(websocket, code=1011)
     except RepositoryPreparationError as exc:
-        await emit(
-            {
-                "type": "error",
-                "detail": ErrorDetail(code=exc.code, message=exc.message).model_dump(),
-            }
-        )
+        await _send_error(websocket, exc.code, exc.message)
     except Exception:
-        await emit(
-            {
-                "type": "error",
-                "detail": ErrorDetail(
-                    code="scan_failed",
-                    message="The scan failed before completion.",
-                ).model_dump(),
-            }
+        await _send_error(
+            websocket,
+            "scan_failed",
+            "The scan failed before completion.",
         )
-        await websocket.close(code=1011)
+        await _close_websocket(websocket, code=1011)
+
+
+async def _receive_scan_request(websocket: WebSocket) -> ScanRequest | None:
+    try:
+        payload = await websocket.receive_json()
+    except JSONDecodeError:
+        await _send_error(
+            websocket,
+            "invalid_scan_request",
+            "Scan request must be valid JSON.",
+        )
+        return None
+
+    if not isinstance(payload, dict):
+        await _send_error(
+            websocket,
+            "invalid_scan_request",
+            "Scan request must be a JSON object.",
+        )
+        return None
+
+    try:
+        return ScanRequest.model_validate(payload)
+    except ValidationError:
+        await _send_error(
+            websocket,
+            "invalid_scan_request",
+            "Scan request must include a non-empty repo_path.",
+        )
+        return None
+
+
+async def _send_error(websocket: WebSocket, code: str, message: str) -> None:
+    await _send_event(
+        websocket,
+        {
+            "type": "error",
+            "detail": ErrorDetail(code=code, message=message).model_dump(),
+        },
+    )
+
+
+async def _send_event(websocket: WebSocket, event: dict) -> None:
+    await websocket.send_json(jsonable_encoder(event))
+
+
+async def _close_websocket(websocket: WebSocket, code: int) -> None:
+    try:
+        await websocket.close(code=code)
+    except RuntimeError:
+        return

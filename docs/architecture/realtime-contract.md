@@ -4,8 +4,7 @@
 
 ## Decision
 
-Scan progress streams over `/ws/scans` as JSON messages with a stable `type`
-field.
+Scan progress streams over `/ws/scan` as JSON messages with a stable `type` field.
 
 ## Event Types
 

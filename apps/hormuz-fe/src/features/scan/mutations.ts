@@ -7,3 +7,8 @@ export function usePreviewScanMutation() {
   })
 }
 
+export function useGenerateFixesMutation() {
+  return useMutation({
+    mutationFn: scanApi.generateFixes,
+  })
+}
