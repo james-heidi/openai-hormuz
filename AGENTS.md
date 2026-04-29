@@ -21,7 +21,8 @@ here with Codex-oriented instructions for this repo.
 
 - `apps/hormuz-be`: FastAPI backend on port 4000.
 - `apps/hormuz-fe`: Vite React frontend on port 3000.
-- `demo_repo`: deterministic demo target containing known compliance issues.
+- Standalone demo target:
+  `https://github.com/james-heidi/openai-hormuz-demo-repo`.
 
 ## Common Commands
 
