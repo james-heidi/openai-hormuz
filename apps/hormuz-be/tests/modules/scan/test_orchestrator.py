@@ -10,6 +10,7 @@ from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.application.rule_catalog import default_agents
 from modules.scan.application.scanners.api_auditor import API_OVEREXPOSURE, ApiAuditorAgent
+from modules.scan.application.scanners.auth_checker import AuthCheckerAgent, MISSING_AUTH
 from modules.scan.application.scanners.pii_scanner import PII_IN_LOGS, PiiScanAgent
 from modules.scan.domain.entities import AgentStatus, Finding, ScanRequest, Severity
 from modules.scan.domain.errors import ScanConfigurationError
@@ -95,9 +96,22 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
         assert finding.remediation_hint
         assert finding.regulations
 
+    missing_auth = next(
+        finding for finding in summary.findings if finding.violation_type == MISSING_AUTH
+    )
+    assert missing_auth.agent == "Auth Checker"
+    assert missing_auth.file_path == "api/users.py"
+    assert missing_auth.line == 11
+    assert missing_auth.context == "GET /admin/all-users -> get_all_users"
+    assert missing_auth.remediation_hint == missing_auth.recommendation
+
     finding_events = [event["finding"] for event in events if event["type"] == "finding"]
     assert all("violation_type" in finding for finding in finding_events)
     assert all("remediation_hint" in finding for finding in finding_events)
+    missing_auth_event = next(
+        finding for finding in finding_events if finding["violation_type"] == MISSING_AUTH
+    )
+    assert missing_auth_event["context"] == missing_auth.context
 
 
 @pytest.mark.asyncio
@@ -130,6 +144,14 @@ def test_pii_scanner_prompt_requires_structured_json() -> None:
     assert "Return only JSON" in prompt
     assert PII_IN_LOGS in prompt
     assert "Do not include markdown" in prompt
+
+
+def test_auth_checker_prompt_requires_structured_json() -> None:
+    prompt = AuthCheckerAgent().prompt_text()
+
+    assert prompt is not None
+    assert "Return only structured JSON findings" in prompt
+    assert MISSING_AUTH in prompt
 
 
 @pytest.mark.asyncio
@@ -241,6 +263,14 @@ def test_api_auditor_prompt_forces_structured_json() -> None:
 
 def test_default_agents_can_fall_back_to_two_scanners(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCAN_ENABLED_AGENTS", "pii,api")
+
+    agents = default_agents()
+
+    assert [agent.category for agent in agents] == ["pii", "api"]
+
+
+def test_default_agents_can_disable_auth_checker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCAN_DISABLED_AGENTS", "auth")
 
     agents = default_agents()
 
