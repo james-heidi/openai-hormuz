@@ -28,7 +28,7 @@ class Finding(BaseModel):
     id: str
     agent: str
     category: str
-    violation_type: str | None = None
+    violation_type: str
     severity: Severity
     file_path: str
     line: int | None = None
@@ -38,7 +38,7 @@ class Finding(BaseModel):
     snippet: str | None = None
     regulations: list[RegulationRef] = Field(default_factory=list)
     recommendation: str
-    remediation_hint: str | None = None
+    remediation_hint: str
 
 
 class ScanRequest(BaseModel):

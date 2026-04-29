@@ -10,6 +10,7 @@ from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.application.rule_catalog import default_agents
 from modules.scan.application.scanners.api_auditor import API_OVEREXPOSURE, ApiAuditorAgent
+from modules.scan.application.scanners.pii_scanner import PII_IN_LOGS, PiiScanAgent
 from modules.scan.domain.entities import AgentStatus, Finding, ScanRequest, Severity
 from modules.scan.domain.errors import ScanConfigurationError
 from modules.scan.domain.ports import EventEmitter, ScanAgent
@@ -51,6 +52,10 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
     assert summary.counts_by_severity[Severity.CRITICAL] == 5
     assert summary.counts_by_severity[Severity.HIGH] == 4
     assert summary.counts_by_severity[Severity.MEDIUM] == 2
+    pii_log = next(finding for finding in summary.findings if finding.violation_type == PII_IN_LOGS)
+    assert pii_log.file_path == "auth.py"
+    assert pii_log.line is not None
+    assert pii_log.remediation_hint == pii_log.recommendation
     assert events[0]["type"] == "scan_started"
     assert events[-1]["type"] == "scan_complete"
     assert not list(scan_storage.iterdir())
@@ -89,6 +94,42 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
         assert finding.description
         assert finding.remediation_hint
         assert finding.regulations
+
+    finding_events = [event["finding"] for event in events if event["type"] == "finding"]
+    assert all("violation_type" in finding for finding in finding_events)
+    assert all("remediation_hint" in finding for finding in finding_events)
+
+
+@pytest.mark.asyncio
+async def test_pii_scanner_detects_console_log_pii(tmp_path: Path) -> None:
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    (repo_path / "app.ts").write_text(
+        """
+function logProfile(user: User) {
+  console.log("profile lookup", user.email, user.phone)
+}
+""".lstrip()
+    )
+
+    async def emit(_event: dict) -> None:
+        return None
+
+    findings = await PiiScanAgent().scan(repo_path, emit)
+
+    assert len(findings) == 1
+    assert findings[0].violation_type == PII_IN_LOGS
+    assert findings[0].file_path == "app.ts"
+    assert findings[0].remediation_hint
+
+
+def test_pii_scanner_prompt_requires_structured_json() -> None:
+    prompt = PiiScanAgent().prompt_text()
+
+    assert prompt is not None
+    assert "Return only JSON" in prompt
+    assert PII_IN_LOGS in prompt
+    assert "Do not include markdown" in prompt
 
 
 @pytest.mark.asyncio
@@ -301,12 +342,14 @@ def _finding(agent: str, category: str) -> Finding:
         id=f"{category}:fixture.py:1",
         agent=agent,
         category=category,
+        violation_type=f"{category.upper()}_TEST_FINDING",
         severity=Severity.HIGH,
         file_path="fixture.py",
         line=1,
         title="Fixture finding",
         description="A deterministic test finding.",
         recommendation="Fix the deterministic test finding.",
+        remediation_hint="Fix the deterministic test finding.",
     )
 
 

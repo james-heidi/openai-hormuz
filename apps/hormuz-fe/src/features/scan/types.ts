@@ -11,7 +11,7 @@ export type Finding = {
   id: string
   agent: string
   category: string
-  violation_type: string | null
+  violation_type: string
   severity: Severity
   file_path: string
   line: number | null
@@ -21,7 +21,7 @@ export type Finding = {
   snippet: string | null
   regulations: RegulationRef[]
   recommendation: string
-  remediation_hint: string | null
+  remediation_hint: string
 }
 
 export type ScanSummary = {

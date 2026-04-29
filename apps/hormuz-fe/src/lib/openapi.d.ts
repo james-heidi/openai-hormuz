@@ -51,7 +51,7 @@ export interface components {
             /** Category */
             category: string;
             /** Violation Type */
-            violation_type?: string | null;
+            violation_type: string;
             severity: components["schemas"]["Severity"];
             /** File Path */
             file_path: string;
@@ -70,7 +70,7 @@ export interface components {
             /** Recommendation */
             recommendation: string;
             /** Remediation Hint */
-            remediation_hint?: string | null;
+            remediation_hint: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
