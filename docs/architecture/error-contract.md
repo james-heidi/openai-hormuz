@@ -12,7 +12,7 @@ shape before closing.
 
 - Frontend can route all API failures through one toast layer.
 - Demo failures stay readable instead of leaking Python tracebacks.
-- The shape matches the structured-error convention in `scribe-workspace`.
+- The shape gives clients one predictable structured-error format.
 
 ## Shape
 
@@ -22,4 +22,3 @@ shape before closing.
   "message": "The repository path does not exist."
 }
 ```
-
