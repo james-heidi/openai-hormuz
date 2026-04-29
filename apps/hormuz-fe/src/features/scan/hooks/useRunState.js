@@ -10,10 +10,16 @@ const initialState = Object.freeze({
   agents: {},
   results: [],
   score: null,
+  projectedScore: null,
   prevScore: null,
+  baselineScore: null,
+  baselinePenalty: null,
+  fixFailureCount: 0,
   error: null,
   summary: null,
 });
+
+const FIX_SUGGESTION_ACTION_ID = 'fix-suggestion';
 
 const ACTIONS = Object.freeze({
   RUN_REQUESTED: 'RUN_REQUESTED',
@@ -87,6 +93,10 @@ function reducer(state, action) {
         ...state,
         status: summary.scan_status === 'failed' ? RUN_STATUSES.ERROR : RUN_STATUSES.COMPLETE,
         score: summary.score,
+        projectedScore: null,
+        baselineScore: summary.score,
+        baselinePenalty: penaltyForFindings(results),
+        fixFailureCount: 0,
         summary,
         results,
         error: failedAgents.length
@@ -107,24 +117,37 @@ function reducer(state, action) {
       const patches = Array.isArray(summary?.patches)
         ? summary.patches.map(resultFromPatch)
         : [];
-      const rescanResults = Array.isArray(summary?.rescan_summary?.findings)
-        ? summary.rescan_summary.findings.map(resultFromFinding).filter(Boolean)
-        : null;
-      const nextScore = summary?.rescan_summary?.score;
       const failures = summary?.failures ?? [];
+      const hasPatches = patches.length > 0;
+      const resolveAll = Boolean(action.resolveAll && hasPatches);
+      const existingPatches = resolveAll ? [] : state.results.filter(isPatchResult);
+      const resolvedFindingIds = new Set(patches.map((patch) => patch.metadata?.violationCode));
+      const violationResults = resolveAll
+        ? []
+        : state.results.filter(
+            (result) => !isPatchResult(result) && !resolvedFindingIds.has(result.id),
+          );
+      const nextScore = hasPatches
+        ? scoreForRemainingViolations({
+            baselineScore: state.baselineScore,
+            baselinePenalty: state.baselinePenalty,
+            remainingViolations: violationResults,
+          })
+        : state.score;
       return {
         ...state,
         results: [
-          ...(rescanResults
-            ?? state.results.filter((result) => result?.metadata?.kind !== 'patch')),
-          ...patches,
+          ...violationResults,
+          ...mergePatchResults(existingPatches, patches),
         ],
-        prevScore: typeof nextScore === 'number' ? state.score : state.prevScore,
-        score: typeof nextScore === 'number' ? nextScore : state.score,
+        prevScore: hasPatches ? state.score : state.prevScore,
+        score: nextScore,
+        projectedScore: null,
+        fixFailureCount: resolveAll ? 0 : failures.length,
         summary: summary?.rescan_summary ?? state.summary,
-        error: failures.length
+        error: failures.length && !hasPatches
           ? failures.map((failure) => failure.message).join('\n')
-          : state.error,
+          : null,
       };
     }
 
@@ -160,8 +183,12 @@ export function useRunState() {
     return runId;
   }, []);
 
-  const fixesGenerated = useCallback((summary) => {
-    dispatch({ type: ACTIONS.FIXES_GENERATED, summary });
+  const fixesGenerated = useCallback((summary, options = {}) => {
+    dispatch({
+      type: ACTIONS.FIXES_GENERATED,
+      summary,
+      resolveAll: Boolean(options.resolveAll),
+    });
   }, []);
 
   const reset = useCallback(() => {
@@ -191,13 +218,13 @@ function resultFromFinding(finding) {
       gdpr: regulations.find((regulation) => regulation.framework === 'GDPR'),
       app: regulations.find((regulation) => regulation.framework === 'APP'),
     },
-    actions: [{ label: 'Auto-fix', actionId: 'auto-fix' }],
+    actions: [{ label: 'Fix suggestion', actionId: FIX_SUGGESTION_ACTION_ID }],
   };
 }
 
 function resultFromPatch(patch, index) {
   if (!patch) return null;
-  const id = `patch:${patch.finding_id ?? index}:${index}`;
+  const id = `patch:${patch.finding_id ?? patch.file_path ?? index}`;
   return {
     id,
     agentId: 'fix-generator',
@@ -211,6 +238,57 @@ function resultFromPatch(patch, index) {
     },
     actions: [],
   };
+}
+
+function isPatchResult(result) {
+  return result?.metadata?.kind === 'patch';
+}
+
+function mergePatchResults(existingPatches, incomingPatches) {
+  const patchesById = new Map();
+  for (const patch of existingPatches) {
+    if (patch?.id) patchesById.set(patch.id, patch);
+  }
+  for (const patch of incomingPatches) {
+    if (patch?.id) patchesById.set(patch.id, patch);
+  }
+  return [...patchesById.values()];
+}
+
+const SEVERITY_WEIGHTS = Object.freeze({
+  critical: 18,
+  high: 10,
+  medium: 5,
+  low: 2,
+});
+
+function scoreForRemainingViolations({ baselineScore, baselinePenalty, remainingViolations }) {
+  if (baselinePenalty === 0) return 100;
+  if (typeof baselinePenalty !== 'number' || baselinePenalty < 0) {
+    return scoreFromPenalty(penaltyForFindings(remainingViolations));
+  }
+
+  const baseScore = typeof baselineScore === 'number' ? baselineScore : 0;
+  const remainingPenalty = penaltyForFindings(remainingViolations);
+  const resolvedPenalty = Math.max(0, baselinePenalty - remainingPenalty);
+  const resolvedShare = Math.min(1, resolvedPenalty / baselinePenalty);
+  return Math.max(
+    baseScore,
+    Math.min(100, Math.round(baseScore + (100 - baseScore) * resolvedShare)),
+  );
+}
+
+function scoreFromPenalty(penalty) {
+  return Math.max(0, 100 - penalty);
+}
+
+function penaltyForFindings(findings) {
+  if (!Array.isArray(findings)) return 0;
+  return findings.reduce(
+    (total, finding) =>
+      total + (SEVERITY_WEIGHTS[String(finding?.severity ?? '').toLowerCase()] ?? 0),
+    0,
+  );
 }
 
 function diffLines(diff) {

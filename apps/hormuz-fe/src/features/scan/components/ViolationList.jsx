@@ -6,6 +6,8 @@ import ViolationCard from './ViolationCard';
 import { sortBySeverity, tone } from '../lib/severity';
 
 const isViolation = (r) => r?.metadata?.kind !== 'patch';
+const isFixSuggestionAction = (action) =>
+  action?.actionId === 'fix-suggestion' || action?.actionId === 'auto-fix';
 
 function clauseLabel(regulation, fallback) {
   return regulation?.clause ?? regulation?.article ?? regulation?.principle ?? fallback;
@@ -42,7 +44,7 @@ export default function ViolationList({
             <AnimatePresence initial={false}>
               {violations.map((result) => {
                 const selected = result.id === selectedId;
-                const primaryAction = result.actions?.find((a) => a.actionId === 'auto-fix');
+                const primaryAction = result.actions?.find(isFixSuggestionAction);
                 return (
                   <motion.li
                     key={result.id}

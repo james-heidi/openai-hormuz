@@ -4,7 +4,7 @@ import { EVT, AGENT_STATUSES } from './protocol';
  * Domain mock server for Compliance Codex. Emits the same wire protocol as
  * the real backend would, with realistic GDPR + AU Privacy Act metadata
  * embedded in each finding. Lets `npm run dev` walk the full demo flow
- * (scan → 10 violations → score 24 → auto-fix → 5 patches → score 91)
+ * (scan → 10 violations → score 24 → fix suggestion → 5 patches → score 91)
  * without an orchestrator running.
  *
  * Scripted scan phase:
@@ -114,7 +114,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -131,7 +131,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -148,7 +148,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -165,7 +165,7 @@ const VIOLATIONS = [
       app: APP.APP_3_6,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -182,7 +182,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -199,7 +199,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -216,7 +216,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -233,7 +233,7 @@ const VIOLATIONS = [
       app: APP.APP_6,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -250,7 +250,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },
@@ -267,7 +267,7 @@ const VIOLATIONS = [
       app: APP.APP_11,
     },
     actions: [
-      { label: 'Auto-fix', actionId: 'auto-fix' },
+      { label: 'Fix suggestion', actionId: 'fix-suggestion' },
       { label: 'Suppress', actionId: 'suppress' },
     ],
   },

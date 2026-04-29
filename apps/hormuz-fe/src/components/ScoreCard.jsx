@@ -27,6 +27,7 @@ function pickAssessment(score, thresholds) {
 
 export default function ScoreCard({
   score,
+  projectedScore,
   label = 'Score',
   thresholds = DEFAULT_THRESHOLDS,
 }) {
@@ -53,6 +54,7 @@ export default function ScoreCard({
   const numberClass = pickNumberClass(score, thresholds);
   const scoreClass = pickScoreClass(score, thresholds);
   const assessment = pickAssessment(score, thresholds);
+  const hasProjectedScore = typeof projectedScore === 'number';
 
   return (
     <motion.div
@@ -82,6 +84,11 @@ export default function ScoreCard({
         <div className="mt-1 text-[11px] text-text-dim">
           out of 100
         </div>
+        {hasProjectedScore && (
+          <div className="mt-1 font-mono text-[11px] text-accent">
+            projected {projectedScore}
+          </div>
+        )}
       </div>
     </motion.div>
   );
