@@ -74,6 +74,24 @@
   },
   "components": {
     "schemas": {
+      "AgentFailure": {
+        "properties": {
+          "agent": {
+            "type": "string",
+            "title": "Agent"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent",
+          "message"
+        ],
+        "title": "AgentFailure"
+      },
       "Finding": {
         "properties": {
           "id": {
@@ -255,8 +273,20 @@
         ],
         "title": "ScanRequest"
       },
+      "ScanStatus": {
+        "type": "string",
+        "enum": [
+          "complete",
+          "partial",
+          "failed"
+        ],
+        "title": "ScanStatus"
+      },
       "ScanSummary": {
         "properties": {
+          "scan_status": {
+            "$ref": "#/components/schemas/ScanStatus"
+          },
           "score": {
             "type": "integer",
             "maximum": 100.0,
@@ -277,20 +307,37 @@
             "type": "object",
             "title": "Counts By Severity"
           },
+          "counts_by_agent": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts By Agent"
+          },
           "findings": {
             "items": {
               "$ref": "#/components/schemas/Finding"
             },
             "type": "array",
             "title": "Findings"
+          },
+          "failed_agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentFailure"
+            },
+            "type": "array",
+            "title": "Failed Agents"
           }
         },
         "type": "object",
         "required": [
+          "scan_status",
           "score",
           "total_findings",
           "counts_by_severity",
-          "findings"
+          "counts_by_agent",
+          "findings",
+          "failed_agents"
         ],
         "title": "ScanSummary"
       },
