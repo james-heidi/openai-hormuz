@@ -2,8 +2,9 @@ import asyncio
 from collections.abc import Sequence
 from itertools import chain
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
+from modules.scan.application.repositories import RepositoryPreparationError, RepositoryPreparer
 from modules.scan.domain.entities import (
     AgentStatus,
     AgentUpdate,
@@ -12,7 +13,6 @@ from modules.scan.domain.entities import (
     ScanSummary,
     Severity,
 )
-from modules.scan.application.repositories import RepositoryPreparationError, RepositoryPreparer
 from modules.scan.domain.ports import EventEmitter, ScanAgent
 
 SEVERITY_WEIGHTS = {
@@ -44,19 +44,22 @@ class ScanOrchestrator:
     async def run(self, request: ScanRequest, emit: EventEmitter) -> ScanSummary:
         self._settings.validate_for_scan()
         source = _validate_scan_source(request.repo_path, self._settings.scan_allowed_roots)
+        events = _ScanRunEvents(emit)
 
-        await emit(
+        await events.emit(
             {
                 "type": "scan_started",
                 "repo_path": source,
                 "agents": [agent.name for agent in self._agents],
             }
         )
+        for agent in self._agents:
+            await events.emit_update(agent.name, AgentStatus.IDLE, "Waiting", 0)
 
         with self._repository_preparer.prepare(source, [agent.name for agent in self._agents]) as repo:
             results = await asyncio.gather(
                 *(
-                    self._run_agent(agent, repo.worktree_for(agent.name), emit)
+                    self._run_agent(agent, repo.worktree_for(agent.name), events)
                     for agent in self._agents
                 )
             )
@@ -65,32 +68,53 @@ class ScanOrchestrator:
             key=lambda finding: (finding.file_path, finding.line or 0, finding.id),
         )
 
-        for finding in findings:
-            await emit({"type": "finding", "finding": finding.model_dump(mode="json")})
-
         summary = ScanSummary(
             score=_score(findings),
             total_findings=len(findings),
             counts_by_severity=_counts_by_severity(findings),
             findings=findings,
         )
-        await emit({"type": "scan_complete", "summary": summary.model_dump(mode="json")})
+        await events.emit({"type": "scan_complete", "summary": summary.model_dump(mode="json")})
         return summary
 
     async def _run_agent(
-        self, agent: ScanAgent, repo_path: Path, emit: EventEmitter
+        self, agent: ScanAgent, repo_path: Path, events: "_ScanRunEvents"
     ) -> list[Finding]:
         try:
-            return await agent.scan(repo_path, emit)
+            findings = await agent.scan(repo_path, events.emit)
+            for finding in findings:
+                await events.emit_finding(finding)
+            return findings
         except Exception as exc:
-            update = AgentUpdate(
-                agent=agent.name,
-                status=AgentStatus.ERROR,
-                message=str(exc),
-                progress=100,
-            )
-            await emit({"type": "agent_update", "update": update.model_dump(mode="json")})
+            await events.emit_update(agent.name, AgentStatus.ERROR, str(exc), 100)
             return []
+
+
+class _ScanRunEvents:
+    def __init__(self, emit: EventEmitter) -> None:
+        self._emit = emit
+        self._lock = asyncio.Lock()
+        self._emitted_finding_ids: set[str] = set()
+
+    async def emit(self, event: dict[str, Any]) -> None:
+        async with self._lock:
+            if event.get("type") == "finding":
+                finding = event.get("finding")
+                finding_id = finding.get("id") if isinstance(finding, dict) else None
+                if finding_id in self._emitted_finding_ids:
+                    return
+                if finding_id:
+                    self._emitted_finding_ids.add(finding_id)
+            await self._emit(event)
+
+    async def emit_update(
+        self, agent: str, status: AgentStatus, message: str, progress: int
+    ) -> None:
+        update = AgentUpdate(agent=agent, status=status, message=message, progress=progress)
+        await self.emit({"type": "agent_update", "update": update.model_dump(mode="json")})
+
+    async def emit_finding(self, finding: Finding) -> None:
+        await self.emit({"type": "finding", "finding": finding.model_dump(mode="json")})
 
 
 def _counts_by_severity(findings: list[Finding]) -> dict[Severity, int]:
