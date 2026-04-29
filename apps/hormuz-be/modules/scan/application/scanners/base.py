@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from modules.scan.domain.entities import AgentStatus, AgentUpdate, Finding, RegulationRef, Severity
-from modules.scan.domain.ports import EventEmitter
+from modules.scan.domain.ports import EventEmitter, ScanAgent
 
 SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
 SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", "dist", "build"}
@@ -27,7 +27,7 @@ class SourceMatch:
     remediation_hint: str | None = None
 
 
-class BackendScannerAgent:
+class BackendScannerAgent(ScanAgent):
     name: str
     category: str
     prompt_name: str | None = None
@@ -52,7 +52,9 @@ class BackendScannerAgent:
                 if key in seen:
                     continue
                 seen.add(key)
-                findings.append(self.to_finding(match, repo_path))
+                finding = self.to_finding(match, repo_path)
+                findings.append(finding)
+                await emit({"type": "finding", "finding": finding.model_dump(mode="json")})
 
             progress = 5 + round(index / total * 90)
             await emit_update(emit, self.name, AgentStatus.RUNNING, file_path.name, progress)
