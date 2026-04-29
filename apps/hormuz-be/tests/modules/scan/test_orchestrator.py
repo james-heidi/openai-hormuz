@@ -1,8 +1,11 @@
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from modules.scan.adapters.outbound.git_repository import GitRepositoryPreparer
 from modules.scan.application.orchestrator import ScanOrchestrator
+from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.application.rule_catalog import default_agents
 from modules.scan.domain.entities import ScanRequest, Severity
 
@@ -13,13 +16,14 @@ async def test_orchestrator_finds_demo_target_violations(
 ) -> None:
     demo_target = tmp_path / "openai-hormuz-demo-repo"
     _write_demo_fixture(demo_target)
+    scan_storage = tmp_path / "scan-workspaces"
     monkeypatch.setenv("SCAN_ALLOWED_ROOTS", str(tmp_path))
     events: list[dict] = []
 
     async def emit(event: dict) -> None:
         events.append(event)
 
-    summary = await ScanOrchestrator(default_agents()).run(
+    summary = await ScanOrchestrator(default_agents(), GitRepositoryPreparer(scan_storage)).run(
         ScanRequest(repo_path=str(demo_target)),
         emit,
     )
@@ -30,6 +34,7 @@ async def test_orchestrator_finds_demo_target_violations(
     assert summary.counts_by_severity[Severity.MEDIUM] == 2
     assert events[0]["type"] == "scan_started"
     assert events[-1]["type"] == "scan_complete"
+    assert not list(scan_storage.iterdir())
 
 
 @pytest.mark.asyncio
@@ -37,8 +42,8 @@ async def test_orchestrator_rejects_paths_outside_allowed_roots() -> None:
     async def emit(_event: dict) -> None:
         return None
 
-    with pytest.raises(ValueError, match="outside the configured scan roots"):
-        await ScanOrchestrator(default_agents()).run(
+    with pytest.raises(RepositoryPreparationError, match="outside the configured scan roots"):
+        await ScanOrchestrator(default_agents(), GitRepositoryPreparer()).run(
             ScanRequest(repo_path="/"),
             emit,
         )
@@ -103,4 +108,24 @@ def handle_error(request, exc):
 def send_analytics(user):
     requests.post("https://analytics.example.com", json={"email": user.email})
 """.lstrip()
+    )
+    _commit_fixture(repo_path)
+
+
+def _commit_fixture(repo_path: Path) -> None:
+    _git(repo_path, "init")
+    _git(repo_path, "checkout", "-b", "main")
+    _git(repo_path, "config", "user.name", "Hormuz Test")
+    _git(repo_path, "config", "user.email", "hormuz@example.com")
+    _git(repo_path, "add", ".")
+    _git(repo_path, "commit", "-m", "demo fixture")
+
+
+def _git(repo_path: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
     )

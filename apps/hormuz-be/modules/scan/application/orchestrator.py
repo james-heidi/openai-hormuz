@@ -12,6 +12,7 @@ from modules.scan.domain.entities import (
     Severity,
 )
 from modules.scan.domain.ports import EventEmitter, ScanAgent
+from modules.scan.application.repositories import RepositoryPreparationError, RepositoryPreparer
 
 SEVERITY_WEIGHTS = {
     Severity.CRITICAL: 18,
@@ -22,27 +23,28 @@ SEVERITY_WEIGHTS = {
 
 
 class ScanOrchestrator:
-    def __init__(self, agents: list[ScanAgent]) -> None:
+    def __init__(self, agents: list[ScanAgent], repository_preparer: RepositoryPreparer) -> None:
         self._agents = agents
+        self._repository_preparer = repository_preparer
 
     async def run(self, request: ScanRequest, emit: EventEmitter) -> ScanSummary:
-        repo_path = Path(request.repo_path).expanduser().resolve()
-        if not repo_path.exists() or not repo_path.is_dir():
-            raise ValueError("The repository path does not exist or is not a directory.")
-        if not _is_allowed_scan_root(repo_path):
-            raise ValueError("The repository path is outside the configured scan roots.")
+        source = _validate_scan_source(request.repo_path)
 
         await emit(
             {
                 "type": "scan_started",
-                "repo_path": str(repo_path),
+                "repo_path": source,
                 "agents": [agent.name for agent in self._agents],
             }
         )
 
-        results = await asyncio.gather(
-            *(self._run_agent(agent, repo_path, emit) for agent in self._agents)
-        )
+        with self._repository_preparer.prepare(source, [agent.name for agent in self._agents]) as repo:
+            results = await asyncio.gather(
+                *(
+                    self._run_agent(agent, repo.worktree_for(agent.name), emit)
+                    for agent in self._agents
+                )
+            )
         findings = sorted(
             chain.from_iterable(results),
             key=lambda finding: (finding.file_path, finding.line or 0, finding.id),
@@ -90,6 +92,29 @@ def _score(findings: list[Finding]) -> int:
 
 def _is_allowed_scan_root(repo_path: Path) -> bool:
     return any(_is_relative_to(repo_path, root) for root in _allowed_scan_roots())
+
+
+def _validate_scan_source(source: str) -> str:
+    source = source.strip()
+    if not source:
+        raise RepositoryPreparationError("invalid_repo_source", "The repository source is empty.")
+
+    repo_path = Path(source).expanduser()
+    if repo_path.exists():
+        repo_path = repo_path.resolve()
+        if not repo_path.is_dir():
+            raise RepositoryPreparationError(
+                "invalid_repo_path",
+                "The repository path does not exist or is not a directory.",
+            )
+        if not _is_allowed_scan_root(repo_path):
+            raise RepositoryPreparationError(
+                "invalid_repo_path",
+                "The repository path is outside the configured scan roots.",
+            )
+        return str(repo_path)
+
+    return source
 
 
 def _allowed_scan_roots() -> list[Path]:

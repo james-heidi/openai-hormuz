@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from modules.scan import get_scan_orchestrator
 from modules.scan.application.orchestrator import ScanOrchestrator
+from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.domain.entities import ErrorDetail, ScanRequest, ScanSummary
 
 router = APIRouter(tags=["scan"])
@@ -19,10 +20,10 @@ async def preview_scan(
 
     try:
         return await orchestrator.run(request, emit)
-    except ValueError as exc:
+    except RepositoryPreparationError as exc:
         raise HTTPException(
             status_code=400,
-            detail=ErrorDetail(code="invalid_repo_path", message=str(exc)).model_dump(),
+            detail=ErrorDetail(code=exc.code, message=exc.message).model_dump(),
         ) from exc
 
 
@@ -52,11 +53,11 @@ async def scan_socket(
                 ).model_dump(),
             }
         )
-    except ValueError as exc:
+    except RepositoryPreparationError as exc:
         await emit(
             {
                 "type": "error",
-                "detail": ErrorDetail(code="invalid_repo_path", message=str(exc)).model_dump(),
+                "detail": ErrorDetail(code=exc.code, message=exc.message).model_dump(),
             }
         )
     except Exception:
@@ -70,4 +71,3 @@ async def scan_socket(
             }
         )
         await websocket.close(code=1011)
-
