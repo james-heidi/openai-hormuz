@@ -70,6 +70,88 @@
           }
         }
       }
+    },
+    "/api/fixes/generate": {
+      "post": {
+        "tags": [
+          "scan"
+        ],
+        "summary": "Generate Fixes",
+        "operationId": "generate_fixes_api_fixes_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/fixes": {
+      "post": {
+        "tags": [
+          "scan"
+        ],
+        "summary": "Generate Scan Fixes",
+        "operationId": "generate_scan_fixes_api_scans_fixes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -199,6 +281,219 @@
           "remediation_hint"
         ],
         "title": "Finding"
+      },
+      "FixFailure": {
+        "properties": {
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "FixFailure"
+      },
+      "FixOutputType": {
+        "type": "string",
+        "enum": [
+          "local_diff",
+          "github_pr"
+        ],
+        "title": "FixOutputType"
+      },
+      "FixPatch": {
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "title": "Finding Id"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "diff": {
+            "type": "string",
+            "title": "Diff"
+          },
+          "patch_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patch Path"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "finding_id",
+          "file_path",
+          "diff"
+        ],
+        "title": "FixPatch"
+      },
+      "FixRequest": {
+        "properties": {
+          "repo_path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Repo Path"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "finding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Finding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "apply": {
+            "type": "boolean",
+            "title": "Apply",
+            "default": false
+          },
+          "create_pr": {
+            "type": "boolean",
+            "title": "Create Pr",
+            "default": false
+          },
+          "rescan": {
+            "type": "boolean",
+            "title": "Rescan",
+            "default": false
+          },
+          "patch_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patch Dir"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repo_path"
+        ],
+        "title": "FixRequest"
+      },
+      "FixSummary": {
+        "properties": {
+          "output_type": {
+            "$ref": "#/components/schemas/FixOutputType"
+          },
+          "pr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Url"
+          },
+          "patch_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patch Path"
+          },
+          "diff": {
+            "type": "string",
+            "title": "Diff"
+          },
+          "patches": {
+            "items": {
+              "$ref": "#/components/schemas/FixPatch"
+            },
+            "type": "array",
+            "title": "Patches"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/FixFailure"
+            },
+            "type": "array",
+            "title": "Failures"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied",
+            "default": false
+          },
+          "rescan_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "output_type",
+          "diff",
+          "patches"
+        ],
+        "title": "FixSummary"
       },
       "HTTPValidationError": {
         "properties": {

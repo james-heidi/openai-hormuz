@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from modules.scan.adapters.outbound.git_repository import GitRepositoryPreparer
+from modules.scan.application.fix_catalog import default_fix_agent
+from modules.scan.application.fix_generator import FixGenerator
 from modules.scan.application.regulation_mapper import attach_regulation_metadata
 from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
@@ -13,7 +15,15 @@ from modules.scan.application.rule_catalog import default_agents
 from modules.scan.application.scanners.api_auditor import API_OVEREXPOSURE, ApiAuditorAgent
 from modules.scan.application.scanners.auth_checker import AuthCheckerAgent, MISSING_AUTH
 from modules.scan.application.scanners.pii_scanner import PII_IN_LOGS, PiiScanAgent
-from modules.scan.domain.entities import AgentStatus, Finding, ScanRequest, ScanStatus, Severity
+from modules.scan.domain.entities import (
+    AgentStatus,
+    Finding,
+    FixOutputType,
+    FixRequest,
+    ScanRequest,
+    ScanStatus,
+    Severity,
+)
 from modules.scan.domain.errors import ScanConfigurationError
 from modules.scan.domain.ports import EventEmitter, ScanAgent
 
@@ -21,6 +31,7 @@ from modules.scan.domain.ports import EventEmitter, ScanAgent
 @dataclass(frozen=True)
 class StaticRuntimeSettings:
     scan_allowed_roots: list[Path]
+    scan_worktree_root: Path = Path(".hormuz-test-worktrees")
     openai_configured: bool = True
 
     def validate_for_scan(self) -> None:
@@ -214,6 +225,104 @@ async def test_orchestrator_recomputes_score_after_fix_rerun(
         "API Auditor": 0,
         "Auth Checker": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_fix_generator_writes_local_patch_for_selected_finding(
+    tmp_path: Path,
+) -> None:
+    demo_target = tmp_path / "openai-hormuz-demo-repo"
+    _write_demo_fixture(demo_target)
+    settings = StaticRuntimeSettings([tmp_path], scan_worktree_root=tmp_path / "scan-workspaces")
+    orchestrator = ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    )
+
+    summary = await orchestrator.run(ScanRequest(repo_path=str(demo_target)), _discard_event)
+    finding = next(finding for finding in summary.findings if finding.id.startswith("hardcoded-secret:"))
+
+    result = await FixGenerator(
+        default_fix_agent(),
+        orchestrator,
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    ).generate(FixRequest(repo_path=str(demo_target), finding=finding))
+
+    assert result.output_type == FixOutputType.LOCAL_DIFF
+    assert result.pr_url is None
+    assert result.patch_path is not None
+    assert Path(result.patch_path).exists()
+    assert 'JWT_SECRET = os.environ["JWT_SECRET"]' in result.diff
+    assert 'JWT_SECRET = os.environ["JWT_SECRET"]' not in (demo_target / "auth.py").read_text()
+
+
+@pytest.mark.asyncio
+async def test_fix_generator_apply_and_rescan_improves_score(
+    tmp_path: Path,
+) -> None:
+    demo_target = tmp_path / "openai-hormuz-demo-repo"
+    _write_demo_fixture(demo_target)
+    settings = StaticRuntimeSettings([tmp_path], scan_worktree_root=tmp_path / "scan-workspaces")
+    orchestrator = ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    )
+    initial = await orchestrator.run(ScanRequest(repo_path=str(demo_target)), _discard_event)
+
+    result = await FixGenerator(
+        default_fix_agent(),
+        orchestrator,
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    ).generate(
+        FixRequest(
+            repo_path=str(demo_target),
+            findings=initial.findings,
+            apply=True,
+            rescan=True,
+        )
+    )
+
+    assert result.failures == []
+    assert result.applied is True
+    assert result.rescan_summary is not None
+    assert result.rescan_summary.score > initial.score
+    assert result.rescan_summary.total_findings < initial.total_findings
+
+
+@pytest.mark.asyncio
+async def test_fix_generator_falls_back_to_local_diff_when_pr_is_not_configured(
+    tmp_path: Path,
+) -> None:
+    demo_target = tmp_path / "openai-hormuz-demo-repo"
+    _write_demo_fixture(demo_target)
+    settings = StaticRuntimeSettings([tmp_path], scan_worktree_root=tmp_path / "scan-workspaces")
+    orchestrator = ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    )
+    summary = await orchestrator.run(ScanRequest(repo_path=str(demo_target)), _discard_event)
+
+    result = await FixGenerator(
+        default_fix_agent(),
+        orchestrator,
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    ).generate(
+        FixRequest(
+            repo_path=str(demo_target),
+            finding=summary.findings[0],
+            create_pr=True,
+        )
+    )
+
+    assert result.output_type == FixOutputType.LOCAL_DIFF
+    assert result.pr_url is None
+    assert any(failure.code == "github_pr_unconfigured" for failure in result.failures)
 
 
 @pytest.mark.asyncio
@@ -417,6 +526,10 @@ def _regulation(finding: Finding, framework: str):
     return next(
         regulation for regulation in finding.regulations if regulation.framework == framework
     )
+
+
+async def _discard_event(_event: dict) -> None:
+    return None
 
 
 def _write_demo_fixture(repo_path: Path) -> None:

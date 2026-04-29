@@ -50,7 +50,12 @@ class AuthCheckerAgent(BackendScannerAgent):
         lines = text.splitlines()
         for index, line in enumerate(lines):
             line_number = index + 1
-            if "JWT_SECRET" in line and "secret" in line.lower():
+            if (
+                "JWT_SECRET" in line
+                and "secret" in line.lower()
+                and "os.environ" not in line
+                and "getenv" not in line
+            ):
                 yield SourceMatch(
                     rule_id="hardcoded-secret",
                     title="Hardcoded secret",

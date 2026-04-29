@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
-from modules.scan import get_scan_orchestrator
+from modules.scan import get_fix_generator, get_scan_orchestrator
+from modules.scan.application.fix_generator import FixGenerator
 from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
-from modules.scan.domain.entities import ErrorDetail, ScanRequest, ScanSummary
+from modules.scan.domain.entities import ErrorDetail, FixRequest, FixSummary, ScanRequest, ScanSummary
 from modules.scan.domain.errors import ScanConfigurationError
 
 router = APIRouter(tags=["scan"])
@@ -31,6 +32,33 @@ async def preview_scan(
             status_code=400,
             detail=ErrorDetail(code=exc.code, message=exc.message).model_dump(),
         ) from exc
+
+
+@router.post("/api/fixes/generate", response_model=FixSummary)
+async def generate_fixes(
+    request: FixRequest,
+    fix_generator: FixGenerator = Depends(get_fix_generator),
+) -> FixSummary:
+    try:
+        return await fix_generator.generate(request)
+    except RepositoryPreparationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorDetail(code=exc.code, message=exc.message).model_dump(),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorDetail(code="invalid_fix_request", message=str(exc)).model_dump(),
+        ) from exc
+
+
+@router.post("/api/scans/fixes", response_model=FixSummary)
+async def generate_scan_fixes(
+    request: FixRequest,
+    fix_generator: FixGenerator = Depends(get_fix_generator),
+) -> FixSummary:
+    return await generate_fixes(request, fix_generator)
 
 
 @router.websocket("/ws/scans")

@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fixes/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Fixes */
+        post: operations["generate_fixes_api_fixes_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scans/fixes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Scan Fixes */
+        post: operations["generate_scan_fixes_api_scans_fixes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -80,6 +114,83 @@ export interface components {
             recommendation: string;
             /** Remediation Hint */
             remediation_hint: string;
+        };
+        /** FixFailure */
+        FixFailure: {
+            /** Finding Id */
+            finding_id?: string | null;
+            /** File Path */
+            file_path?: string | null;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * FixOutputType
+         * @enum {string}
+         */
+        FixOutputType: "local_diff" | "github_pr";
+        /** FixPatch */
+        FixPatch: {
+            /** Finding Id */
+            finding_id: string;
+            /** File Path */
+            file_path: string;
+            /** Diff */
+            diff: string;
+            /** Patch Path */
+            patch_path?: string | null;
+            /**
+             * Applied
+             * @default false
+             */
+            applied: boolean;
+        };
+        /** FixRequest */
+        FixRequest: {
+            /** Repo Path */
+            repo_path: string;
+            /** Findings */
+            findings?: components["schemas"]["Finding"][];
+            finding?: components["schemas"]["Finding"] | null;
+            /**
+             * Apply
+             * @default false
+             */
+            apply: boolean;
+            /**
+             * Create Pr
+             * @default false
+             */
+            create_pr: boolean;
+            /**
+             * Rescan
+             * @default false
+             */
+            rescan: boolean;
+            /** Patch Dir */
+            patch_dir?: string | null;
+        };
+        /** FixSummary */
+        FixSummary: {
+            output_type: components["schemas"]["FixOutputType"];
+            /** Pr Url */
+            pr_url?: string | null;
+            /** Patch Path */
+            patch_path?: string | null;
+            /** Diff */
+            diff: string;
+            /** Patches */
+            patches: components["schemas"]["FixPatch"][];
+            /** Failures */
+            failures?: components["schemas"]["FixFailure"][];
+            /**
+             * Applied
+             * @default false
+             */
+            applied: boolean;
+            rescan_summary?: components["schemas"]["ScanSummary"] | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -204,6 +315,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScanSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_fixes_api_fixes_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_scan_fixes_api_scans_fixes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixSummary"];
                 };
             };
             /** @description Validation Error */
