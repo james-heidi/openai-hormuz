@@ -42,6 +42,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentFailure */
+        AgentFailure: {
+            /** Agent */
+            agent: string;
+            /** Message */
+            message: string;
+        };
         /** Finding */
         Finding: {
             /** Id */
@@ -103,8 +110,14 @@ export interface components {
             /** Repo Path */
             repo_path: string;
         };
+        /**
+         * ScanStatus
+         * @enum {string}
+         */
+        ScanStatus: "complete" | "partial" | "failed";
         /** ScanSummary */
         ScanSummary: {
+            scan_status: components["schemas"]["ScanStatus"];
             /** Score */
             score: number;
             /** Total Findings */
@@ -113,8 +126,14 @@ export interface components {
             counts_by_severity: {
                 [key: string]: number;
             };
+            /** Counts By Agent */
+            counts_by_agent: {
+                [key: string]: number;
+            };
             /** Findings */
             findings: components["schemas"]["Finding"][];
+            /** Failed Agents */
+            failed_agents: components["schemas"]["AgentFailure"][];
         };
         /**
          * Severity

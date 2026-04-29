@@ -1,5 +1,6 @@
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type AgentStatus = 'idle' | 'running' | 'done' | 'error'
+export type ScanStatus = 'complete' | 'partial' | 'failed'
 
 export type RegulationRef = {
   framework: 'GDPR' | 'APP'
@@ -30,10 +31,13 @@ export type Finding = {
 }
 
 export type ScanSummary = {
+  scan_status: ScanStatus
   score: number
   total_findings: number
   counts_by_severity: Record<Severity, number>
+  counts_by_agent: Record<string, number>
   findings: Finding[]
+  failed_agents: { agent: string; message: string }[]
 }
 
 export type AgentUpdate = {

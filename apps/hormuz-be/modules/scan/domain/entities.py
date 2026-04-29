@@ -18,6 +18,12 @@ class AgentStatus(StrEnum):
     ERROR = "error"
 
 
+class ScanStatus(StrEnum):
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
 class RegulationRef(BaseModel):
     framework: Literal["GDPR", "APP"]
     clause: str
@@ -57,11 +63,19 @@ class AgentUpdate(BaseModel):
     progress: int = Field(ge=0, le=100)
 
 
+class AgentFailure(BaseModel):
+    agent: str
+    message: str
+
+
 class ScanSummary(BaseModel):
+    scan_status: ScanStatus
     score: int = Field(ge=0, le=100)
     total_findings: int
     counts_by_severity: dict[Severity, int]
+    counts_by_agent: dict[str, int]
     findings: list[Finding]
+    failed_agents: list[AgentFailure]
 
 
 class ErrorDetail(BaseModel):

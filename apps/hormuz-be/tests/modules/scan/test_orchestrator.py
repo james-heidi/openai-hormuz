@@ -13,7 +13,7 @@ from modules.scan.application.rule_catalog import default_agents
 from modules.scan.application.scanners.api_auditor import API_OVEREXPOSURE, ApiAuditorAgent
 from modules.scan.application.scanners.auth_checker import AuthCheckerAgent, MISSING_AUTH
 from modules.scan.application.scanners.pii_scanner import PII_IN_LOGS, PiiScanAgent
-from modules.scan.domain.entities import AgentStatus, Finding, ScanRequest, Severity
+from modules.scan.domain.entities import AgentStatus, Finding, ScanRequest, ScanStatus, Severity
 from modules.scan.domain.errors import ScanConfigurationError
 from modules.scan.domain.ports import EventEmitter, ScanAgent
 
@@ -51,15 +51,28 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
     )
 
     assert summary.total_findings == 11
+    assert summary.score == 0
+    assert summary.scan_status == ScanStatus.COMPLETE
     assert summary.counts_by_severity[Severity.CRITICAL] == 5
     assert summary.counts_by_severity[Severity.HIGH] == 4
     assert summary.counts_by_severity[Severity.MEDIUM] == 2
+    assert summary.counts_by_agent == {
+        "PII Scanner": 2,
+        "API Auditor": 5,
+        "Auth Checker": 4,
+    }
+    assert summary.failed_agents == []
     pii_log = next(finding for finding in summary.findings if finding.violation_type == PII_IN_LOGS)
     assert pii_log.file_path == "auth.py"
     assert pii_log.line is not None
     assert pii_log.remediation_hint == pii_log.recommendation
     assert events[0]["type"] == "scan_started"
     assert events[-1]["type"] == "scan_complete"
+    assert events[-1]["summary"]["counts_by_agent"] == {
+        "PII Scanner": 2,
+        "API Auditor": 5,
+        "Auth Checker": 4,
+    }
     assert not list(scan_storage.iterdir())
     assert _agents_with_status(events, AgentStatus.IDLE) == {
         "PII Scanner",
@@ -131,6 +144,76 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
     assert all(finding.regulation_warning is None for finding in summary.findings)
     assert all(finding["regulations"] for finding in finding_events)
     assert all(finding["regulation_warning"] is None for finding in finding_events)
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_returns_explicit_empty_scan_summary(
+    tmp_path: Path,
+) -> None:
+    empty_repo = tmp_path / "empty"
+    empty_repo.mkdir()
+    (empty_repo / "README.md").write_text("# Empty fixture\n")
+    _init_git_repo(empty_repo)
+    _commit_all(empty_repo, "empty fixture")
+    events: list[dict] = []
+
+    async def emit(event: dict) -> None:
+        events.append(event)
+
+    summary = await ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(tmp_path / "scan-workspaces"),
+        StaticRuntimeSettings([tmp_path]),
+    ).run(ScanRequest(repo_path=str(empty_repo)), emit)
+
+    assert summary.scan_status == ScanStatus.COMPLETE
+    assert summary.score == 100
+    assert summary.total_findings == 0
+    assert summary.counts_by_severity == {severity: 0 for severity in Severity}
+    assert summary.counts_by_agent == {
+        "PII Scanner": 0,
+        "API Auditor": 0,
+        "Auth Checker": 0,
+    }
+    assert summary.failed_agents == []
+    assert events[-1]["summary"]["scan_status"] == "complete"
+    assert events[-1]["summary"]["findings"] == []
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_recomputes_score_after_fix_rerun(
+    tmp_path: Path,
+) -> None:
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    (repo_path / "auth.py").write_text('JWT_SECRET = "super-secret"\n')
+    _init_git_repo(repo_path)
+    _commit_all(repo_path, "before fix")
+    orchestrator = ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(tmp_path / "scan-workspaces"),
+        StaticRuntimeSettings([tmp_path]),
+    )
+
+    async def emit(_event: dict) -> None:
+        return None
+
+    before_fix = await orchestrator.run(ScanRequest(repo_path=str(repo_path)), emit)
+    (repo_path / "auth.py").write_text('TOKEN_KEY = "loaded-from-env"\n')
+    _commit_all(repo_path, "fix finding")
+    after_fix = await orchestrator.run(ScanRequest(repo_path=str(repo_path)), emit)
+
+    assert before_fix.total_findings == 1
+    assert before_fix.score == 82
+    assert before_fix.counts_by_agent["Auth Checker"] == 1
+    assert after_fix.total_findings == 0
+    assert after_fix.score == 100
+    assert after_fix.counts_by_severity == {severity: 0 for severity in Severity}
+    assert after_fix.counts_by_agent == {
+        "PII Scanner": 0,
+        "API Auditor": 0,
+        "Auth Checker": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -260,6 +343,13 @@ async def test_orchestrator_keeps_successful_findings_when_one_agent_fails(
     ).run(ScanRequest(repo_path=str(demo_target)), emit)
 
     assert summary.total_findings == 1
+    assert summary.scan_status == ScanStatus.PARTIAL
+    assert summary.score == 90
+    assert summary.counts_by_severity[Severity.HIGH] == 1
+    assert summary.counts_by_agent == {"PII Scanner": 1, "Auth Checker": 0}
+    assert len(summary.failed_agents) == 1
+    assert summary.failed_agents[0].agent == "Auth Checker"
+    assert summary.failed_agents[0].message == "auth agent unavailable"
     assert summary.findings[0].agent == "PII Scanner"
     assert any(event["type"] == "finding" for event in events)
     assert any(
@@ -269,6 +359,10 @@ async def test_orchestrator_keeps_successful_findings_when_one_agent_fails(
         and event["update"]["message"] == "auth agent unavailable"
         for event in events
     )
+    assert events[-1]["summary"]["scan_status"] == "partial"
+    assert events[-1]["summary"]["failed_agents"] == [
+        {"agent": "Auth Checker", "message": "auth agent unavailable"}
+    ]
 
 
 def test_api_auditor_prompt_forces_structured_json() -> None:
@@ -321,9 +415,7 @@ def test_regulation_mapper_keeps_unknown_violation_types_explicit() -> None:
 
 def _regulation(finding: Finding, framework: str):
     return next(
-        regulation
-        for regulation in finding.regulations
-        if regulation.framework == framework
+        regulation for regulation in finding.regulations if regulation.framework == framework
     )
 
 
@@ -391,12 +483,20 @@ def send_analytics(user):
 
 
 def _commit_fixture(repo_path: Path) -> None:
+    _init_git_repo(repo_path)
+    _commit_all(repo_path, "demo fixture")
+
+
+def _init_git_repo(repo_path: Path) -> None:
     _git(repo_path, "init")
     _git(repo_path, "checkout", "-b", "main")
     _git(repo_path, "config", "user.name", "Hormuz Test")
     _git(repo_path, "config", "user.email", "hormuz@example.com")
+
+
+def _commit_all(repo_path: Path, message: str) -> None:
     _git(repo_path, "add", ".")
-    _git(repo_path, "commit", "-m", "demo fixture")
+    _git(repo_path, "commit", "-m", message)
 
 
 def _git(repo_path: Path, *args: str) -> None:

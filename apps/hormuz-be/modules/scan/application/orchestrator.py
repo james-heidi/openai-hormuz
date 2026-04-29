@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Sequence
+from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 from typing import Any, Protocol
@@ -7,11 +8,13 @@ from typing import Any, Protocol
 from modules.scan.application.regulation_mapper import attach_regulation_metadata
 from modules.scan.application.repositories import RepositoryPreparationError, RepositoryPreparer
 from modules.scan.domain.entities import (
+    AgentFailure,
     AgentStatus,
     AgentUpdate,
     Finding,
     ScanRequest,
     ScanSummary,
+    ScanStatus,
     Severity,
 )
 from modules.scan.domain.ports import EventEmitter, ScanAgent
@@ -29,6 +32,12 @@ class ScanRuntimeSettings(Protocol):
 
     def validate_for_scan(self) -> None:
         """Raise when required scan-time configuration is missing."""
+
+
+@dataclass(frozen=True)
+class AgentRunResult:
+    findings: list[Finding]
+    failure: AgentFailure | None = None
 
 
 class ScanOrchestrator:
@@ -57,7 +66,9 @@ class ScanOrchestrator:
         for agent in self._agents:
             await events.emit_update(agent.name, AgentStatus.IDLE, "Waiting", 0)
 
-        with self._repository_preparer.prepare(source, [agent.name for agent in self._agents]) as repo:
+        with self._repository_preparer.prepare(
+            source, [agent.name for agent in self._agents]
+        ) as repo:
             results = await asyncio.gather(
                 *(
                     self._run_agent(agent, repo.worktree_for(agent.name), events)
@@ -67,31 +78,38 @@ class ScanOrchestrator:
         findings = sorted(
             (
                 attach_regulation_metadata(finding)
-                for finding in chain.from_iterable(results)
+                for finding in chain.from_iterable(result.findings for result in results)
             ),
             key=lambda finding: (finding.file_path, finding.line or 0, finding.id),
         )
+        failed_agents = [result.failure for result in results if result.failure is not None]
 
         summary = ScanSummary(
+            scan_status=_scan_status(
+                total_agents=len(self._agents), failed_agents=len(failed_agents)
+            ),
             score=_score(findings),
             total_findings=len(findings),
             counts_by_severity=_counts_by_severity(findings),
+            counts_by_agent=_counts_by_agent(findings, [agent.name for agent in self._agents]),
             findings=findings,
+            failed_agents=failed_agents,
         )
         await events.emit({"type": "scan_complete", "summary": summary.model_dump(mode="json")})
         return summary
 
     async def _run_agent(
         self, agent: ScanAgent, repo_path: Path, events: "_ScanRunEvents"
-    ) -> list[Finding]:
+    ) -> AgentRunResult:
         try:
             findings = await agent.scan(repo_path, events.emit)
             for finding in findings:
                 await events.emit_finding(finding)
-            return findings
+            return AgentRunResult(findings=findings)
         except Exception as exc:
+            failure = AgentFailure(agent=agent.name, message=str(exc))
             await events.emit_update(agent.name, AgentStatus.ERROR, str(exc), 100)
-            return []
+            return AgentRunResult(findings=[], failure=failure)
 
 
 class _ScanRunEvents:
@@ -138,6 +156,21 @@ def _counts_by_severity(findings: list[Finding]) -> dict[Severity, int]:
     for finding in findings:
         counts[finding.severity] += 1
     return counts
+
+
+def _counts_by_agent(findings: list[Finding], agent_names: list[str]) -> dict[str, int]:
+    counts = dict.fromkeys(agent_names, 0)
+    for finding in findings:
+        counts[finding.agent] = counts.get(finding.agent, 0) + 1
+    return counts
+
+
+def _scan_status(total_agents: int, failed_agents: int) -> ScanStatus:
+    if failed_agents == 0:
+        return ScanStatus.COMPLETE
+    if failed_agents == total_agents:
+        return ScanStatus.FAILED
+    return ScanStatus.PARTIAL
 
 
 def _score(findings: list[Finding]) -> int:
