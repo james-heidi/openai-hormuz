@@ -281,6 +281,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -290,6 +291,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.135.3" },
     { name = "gitpython", specifier = ">=3.1.49" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28" },
     { name = "openai-agents", specifier = ">=0.14.7" },
     { name = "pydantic", specifier = ">=2.13.0" },
     { name = "pydantic-settings", specifier = ">=2.14.0" },

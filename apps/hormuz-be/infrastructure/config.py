@@ -1,10 +1,10 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from modules.scan.domain.errors import ScanConfigurationError
 
@@ -20,11 +20,11 @@ class BackendSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
     api_port: int = Field(default=4000, validation_alias="API_PORT")
-    cors_origins: list[str] = Field(
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000"],
         validation_alias="CORS_ORIGINS",
     )
-    scan_allowed_roots: list[Path] = Field(
+    scan_allowed_roots: Annotated[list[Path], NoDecode] = Field(
         default_factory=lambda: [_repo_root()],
         validation_alias="SCAN_ALLOWED_ROOTS",
     )
