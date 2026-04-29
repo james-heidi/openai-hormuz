@@ -28,3 +28,14 @@ async def test_orchestrator_finds_demo_repo_violations() -> None:
     assert events[0]["type"] == "scan_started"
     assert events[-1]["type"] == "scan_complete"
 
+
+@pytest.mark.asyncio
+async def test_orchestrator_rejects_paths_outside_allowed_roots() -> None:
+    async def emit(_event: dict) -> None:
+        return None
+
+    with pytest.raises(ValueError, match="outside the configured scan roots"):
+        await ScanOrchestrator(default_agents()).run(
+            ScanRequest(repo_path="/"),
+            emit,
+        )

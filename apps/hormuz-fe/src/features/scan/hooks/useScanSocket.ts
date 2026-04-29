@@ -39,19 +39,23 @@ export function useScanSocket() {
     setState({ ...EMPTY_STATE, running: true })
 
     const socket = new WebSocket(socketUrl())
+    const isActiveSocket = () => socketRef.current === socket
     socketRef.current = socket
 
     socket.onopen = () => {
+      if (!isActiveSocket()) return
       setState((current) => ({ ...current, connected: true }))
       socket.send(JSON.stringify({ repo_path: repoPath }))
     }
 
     socket.onmessage = (event) => {
+      if (!isActiveSocket()) return
       const message = JSON.parse(event.data) as ScanEvent
       setState((current) => reduceScanEvent(current, message))
     }
 
     socket.onerror = () => {
+      if (!isActiveSocket()) return
       setState((current) => ({
         ...current,
         running: false,
@@ -60,12 +64,16 @@ export function useScanSocket() {
     }
 
     socket.onclose = () => {
+      if (!isActiveSocket()) return
+      socketRef.current = null
       setState((current) => ({ ...current, connected: false, running: false }))
     }
   }, [])
 
   const reset = useCallback(() => {
-    socketRef.current?.close()
+    const socket = socketRef.current
+    socketRef.current = null
+    socket?.close()
     setState(EMPTY_STATE)
   }, [])
 
@@ -115,4 +123,3 @@ function upsertAgent(agents: AgentState[], update: AgentUpdate) {
   if (!exists) return [...agents, update]
   return agents.map((agent) => (agent.agent === update.agent ? update : agent))
 }
-

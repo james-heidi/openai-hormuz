@@ -1,4 +1,5 @@
 import asyncio
+import os
 from itertools import chain
 from pathlib import Path
 
@@ -28,6 +29,8 @@ class ScanOrchestrator:
         repo_path = Path(request.repo_path).expanduser().resolve()
         if not repo_path.exists() or not repo_path.is_dir():
             raise ValueError("The repository path does not exist or is not a directory.")
+        if not _is_allowed_scan_root(repo_path):
+            raise ValueError("The repository path is outside the configured scan roots.")
 
         await emit(
             {
@@ -84,3 +87,25 @@ def _score(findings: list[Finding]) -> int:
     penalty = sum(SEVERITY_WEIGHTS[finding.severity] for finding in findings)
     return max(0, 100 - penalty)
 
+
+def _is_allowed_scan_root(repo_path: Path) -> bool:
+    return any(_is_relative_to(repo_path, root) for root in _allowed_scan_roots())
+
+
+def _allowed_scan_roots() -> list[Path]:
+    configured = os.environ.get("SCAN_ALLOWED_ROOTS")
+    if configured:
+        return [
+            Path(root).expanduser().resolve()
+            for root in configured.split(os.pathsep)
+            if root.strip()
+        ]
+    return [Path(__file__).resolve().parents[5]]
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
