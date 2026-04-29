@@ -47,7 +47,8 @@ def _pii_rules() -> list[Rule]:
             severity=Severity.HIGH,
             description="Personal data is posted to an analytics endpoint without an explicit consent gate.",
             recommendation="Gate the transfer behind consent and minimize the payload.",
-            predicate=lambda line, _text, _path: "analytics.example.com" in line,
+            predicate=lambda line, text, _path: "analytics.example.com" in line
+            and "analytics_consent" not in text,
             violation_type=THIRD_PARTY_PII_WITHOUT_CONSENT,
         ),
     ]
