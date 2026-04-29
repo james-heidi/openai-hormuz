@@ -50,11 +50,15 @@ export interface components {
             agent: string;
             /** Category */
             category: string;
+            /** Violation Type */
+            violation_type?: string | null;
             severity: components["schemas"]["Severity"];
             /** File Path */
             file_path: string;
             /** Line */
             line?: number | null;
+            /** Context */
+            context?: string | null;
             /** Title */
             title: string;
             /** Description */
@@ -65,6 +69,8 @@ export interface components {
             regulations?: components["schemas"]["RegulationRef"][];
             /** Recommendation */
             recommendation: string;
+            /** Remediation Hint */
+            remediation_hint?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {

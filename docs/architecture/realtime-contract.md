@@ -21,7 +21,7 @@ field.
 
 - The first client message is the scan request: `{ "repo_path": "..." }`.
 - Every event has a `type`.
-- Findings include `id`, `agent`, `category`, `severity`, `file_path`, `line`,
-  `title`, `description`, `regulations`, and `recommendation`.
+- Findings include `id`, `agent`, `category`, `violation_type`, `severity`,
+  `file_path`, `line`, `context`, `title`, `description`, `regulations`,
+  `recommendation`, and `remediation_hint`.
 - The REST preview endpoint and WebSocket path use the same domain models.
-

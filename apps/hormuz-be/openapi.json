@@ -88,6 +88,17 @@
             "type": "string",
             "title": "Category"
           },
+          "violation_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Violation Type"
+          },
           "severity": {
             "$ref": "#/components/schemas/Severity"
           },
@@ -105,6 +116,17 @@
               }
             ],
             "title": "Line"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
           },
           "title": {
             "type": "string",
@@ -135,6 +157,17 @@
           "recommendation": {
             "type": "string",
             "title": "Recommendation"
+          },
+          "remediation_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Hint"
           }
         },
         "type": "object",
