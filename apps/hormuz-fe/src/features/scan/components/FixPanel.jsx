@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
 import DiffView from '../../../components/ui/DiffView';
 
 const isPatch = (r) => r?.metadata?.kind === 'patch';
+const isFixSuggestionAction = (action) =>
+  action?.actionId === 'fix-suggestion' || action?.actionId === 'auto-fix';
 const isFixable = (r) =>
   r?.metadata?.kind !== 'patch' &&
   Array.isArray(r?.actions) &&
-  r.actions.some((a) => a.actionId === 'auto-fix');
+  r.actions.some(isFixSuggestionAction);
 
-export default function FixPanel({ results, runId, onFixAll, status }) {
+export default function FixPanel({ results, runId, onFixAll, status, failureCount = 0 }) {
   const fixableCount = useMemo(
     () => (Array.isArray(results) ? results.filter(isFixable).length : 0),
     [results],
@@ -22,51 +24,42 @@ export default function FixPanel({ results, runId, onFixAll, status }) {
 
   const [expandedId, setExpandedId] = useState(null);
 
-  // Auto-expand the first patch as it streams in.
-  useEffect(() => {
-    if (patches.length > 0 && expandedId === null) {
-      setExpandedId(patches[0].id);
-    }
-  }, [patches, expandedId]);
-
   const phase =
-    patches.length > 0
-      ? 'streaming'
-      : status === 'fixing'
-        ? 'fixing'
+    status === 'fixing'
+      ? 'fixing'
+      : patches.length > 0
+        ? 'suggested'
         : 'idle';
 
   return (
     <section className="glass-panel-soft theme-transition rounded-lg p-4">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-text">Auto-fix</h2>
+          <h2 className="text-sm font-medium text-text">Fix suggestions</h2>
           <p className="mt-0.5 text-[11px] text-text-dim">
             {phase === 'idle' &&
               (fixableCount > 0
-                ? `${fixableCount} ${fixableCount === 1 ? 'violation' : 'violations'} can be auto-fixed by Codex.`
-                : 'Run a scan first — fixes appear here once violations are detected.')}
-            {phase === 'fixing' && 'Codex subagents are writing patches in parallel worktrees…'}
-            {phase === 'streaming' &&
-              `${patches.length} ${patches.length === 1 ? 'patch' : 'patches'} generated. Click a row to view the diff.`}
+                ? `${fixableCount} ${fixableCount === 1 ? 'violation has' : 'violations have'} available fix suggestions.`
+                : 'Run a scan first. Suggestions appear here once violations are detected.')}
+            {phase === 'fixing' && 'Generating fix suggestions…'}
+            {phase === 'suggested' &&
+              `${patches.length} ${patches.length === 1 ? 'suggestion' : 'suggestions'} generated.${failureCount > 0 ? ` ${failureCount} skipped.` : ''} Click a row to view the diff.`}
           </p>
         </div>
         <button
           type="button"
-          disabled={!runId || fixableCount === 0 || phase !== 'idle'}
+          disabled={!runId || fixableCount === 0 || phase === 'fixing'}
           onClick={() => onFixAll?.()}
           className={clsx(
             'glass-primary theme-transition shrink-0 rounded-md px-4 py-2 text-sm font-semibold',
             'hover:-translate-y-0.5 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent/40',
-            (!runId || fixableCount === 0 || phase !== 'idle') &&
+            (!runId || fixableCount === 0 || phase === 'fixing') &&
               'cursor-not-allowed opacity-40',
           )}
         >
           {phase === 'fixing'
-            ? 'Fixing…'
-            : phase === 'streaming'
-              ? 'Done'
-              : `Auto-fix all (${fixableCount})`}
+            ? 'Generating…'
+            : `Suggest all (${fixableCount})`}
         </button>
       </header>
 

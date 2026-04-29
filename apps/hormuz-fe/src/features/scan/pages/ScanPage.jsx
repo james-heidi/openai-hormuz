@@ -17,6 +17,8 @@ import ConnectionBadge from '../../../components/ConnectionBadge';
 import ThemeToggle from '../../../components/ThemeToggle';
 
 const isViolation = (result) => result?.metadata?.kind !== 'patch';
+const isFixSuggestionAction = (actionId) =>
+  actionId === 'fix-suggestion' || actionId === 'auto-fix';
 
 function defaultSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -110,7 +112,7 @@ export function ScanPage() {
   const isFixing = fixRequested || generateFixes.isPending;
 
   const requestFixes = useCallback(
-    async (findings) => {
+    async (findings, options = {}) => {
       if (!targetRepoPath || !findings.length) return;
       setFixRequested(true);
       setFixError(null);
@@ -118,9 +120,11 @@ export function ScanPage() {
         const summary = await generateFixes.mutateAsync({
           repoPath: targetRepoPath,
           findings,
-          rescan: true,
+          rescan: options.rescan ?? false,
         });
-        fixesGenerated(summary);
+        fixesGenerated(summary, {
+          resolveAll: options.resolveAll ?? false,
+        });
       } catch (error) {
         setFixError(error instanceof Error ? error.message : 'Fix generation failed');
       } finally {
@@ -132,7 +136,7 @@ export function ScanPage() {
 
   const onResultAction = useCallback(
     (actionId, resultId) => {
-      if (actionId !== 'auto-fix') return;
+      if (!isFixSuggestionAction(actionId)) return;
       const finding = violations.find((result) => result.id === resultId);
       if (!finding) return;
       void requestFixes([finding]);
@@ -141,7 +145,7 @@ export function ScanPage() {
   );
 
   const onFixAll = useCallback(() => {
-    void requestFixes(violations);
+    void requestFixes(violations, { rescan: true, resolveAll: true });
   }, [requestFixes, violations]);
 
   useEffect(() => {
@@ -159,7 +163,7 @@ export function ScanPage() {
   }, [selectedViolationId, violations]);
 
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col gap-5 overflow-hidden px-5 py-5 md:px-8">
+    <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-5 px-5 py-5 md:px-8">
       <header className="glass-panel-strong theme-transition flex shrink-0 items-center justify-between gap-4 rounded-lg px-4 py-3">
         <div className="min-w-0">
           <h1 className="truncate text-base font-semibold tracking-tight text-text">
@@ -179,7 +183,7 @@ export function ScanPage() {
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[360px_1fr]">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[360px_1fr]">
         <aside className="flex flex-col gap-5 lg:sticky lg:top-5 lg:self-start">
           <ScanPanel disabled={isRunning} onScan={onScan} />
 
@@ -202,9 +206,12 @@ export function ScanPage() {
           </section>
         </aside>
 
-        <section className="flex min-w-0 min-h-0 flex-col gap-5 overflow-hidden">
+        <section className="flex min-w-0 flex-col gap-5">
           <div className="grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-[240px_1fr]">
-            <ComplianceScore score={state.score} />
+            <ComplianceScore
+              score={state.score}
+              projectedScore={state.projectedScore}
+            />
 
             <section className="glass-panel theme-transition min-w-0 rounded-lg p-4">
               <div className="mb-4 flex items-baseline justify-between gap-3">
@@ -233,6 +240,7 @@ export function ScanPage() {
             <FixPanel
               results={state.results}
               runId={state.runId}
+              failureCount={state.fixFailureCount}
               status={isFixing ? 'fixing' : 'idle'}
               onFixAll={onFixAll}
             />
