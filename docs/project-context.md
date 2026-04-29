@@ -16,7 +16,8 @@ for review.
 - Progress streams to the frontend over WebSocket.
 - Findings include file, line, severity, category, regulation mapping, and
   recommendation.
-- Demo target contains deterministic violations so the live demo is stable.
+- Standalone demo target contains deterministic violations so the live demo is
+  stable: https://github.com/james-heidi/openai-hormuz-demo-repo.
 
 ## Architecture Direction
 
@@ -26,4 +27,3 @@ for review.
 - Git worktree and OpenAI Agents SDK integration points are isolated behind
   backend ports so the first scaffold can run deterministically without LLM
   calls.
-

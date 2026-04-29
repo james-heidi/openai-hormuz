@@ -26,7 +26,7 @@ export function ScanPanel({ running, error, onScan }: ScanPanelProps) {
           id="repo-path"
           value={repoPath}
           onChange={(event) => setRepoPath(event.target.value)}
-          placeholder="/absolute/path/to/demo_repo"
+          placeholder="/absolute/path/to/openai-hormuz-demo-repo"
           className="min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
         />
         <button
@@ -42,4 +42,3 @@ export function ScanPanel({ running, error, onScan }: ScanPanelProps) {
     </form>
   )
 }
-
