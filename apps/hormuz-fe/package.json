@@ -13,6 +13,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.99.0",
     "clsx": "^2.1.1",
+    "framer-motion": "^11.18.2",
     "lucide-react": "^1.8.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -38,4 +39,3 @@
     "vite": "^8.0.4"
   }
 }
-
