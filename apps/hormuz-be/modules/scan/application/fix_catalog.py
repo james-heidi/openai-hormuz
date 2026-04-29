@@ -130,7 +130,7 @@ def _fix_sql_injection(source: str, _finding: Finding) -> str | None:
         source,
         lambda line: "SELECT *" in line and ("{" in line or "%s" in line),
         lambda _line, indent: (
-            f'{indent}return ("SELECT * FROM users WHERE email = :email", '
+            f'{indent}return ("SELECT id FROM users WHERE email = :email", '
             '{"email": email_input})'
         ),
     )

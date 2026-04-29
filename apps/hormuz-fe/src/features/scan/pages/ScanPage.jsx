@@ -17,6 +17,11 @@ import ConnectionBadge from '../../../components/ConnectionBadge';
 import ThemeToggle from '../../../components/ThemeToggle';
 
 const isViolation = (result) => result?.metadata?.kind !== 'patch';
+const REMOTE_REPO_PATTERN = /^(?:https?:\/\/|git@|ssh:\/\/)/i;
+
+function canApplyDirectly(repoPath) {
+  return repoPath && !REMOTE_REPO_PATTERN.test(repoPath.trim());
+}
 
 function defaultSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -67,6 +72,8 @@ export function ScanPage() {
   const [selectedViolationId, setSelectedViolationId] = useState(null);
   const [fixRequested, setFixRequested] = useState(false);
   const [fixError, setFixError] = useState(null);
+  const [fixingFindingId, setFixingFindingId] = useState(null);
+  const [acceptingPatchId, setAcceptingPatchId] = useState(null);
   const [targetRepoPath, setTargetRepoPath] = useState('');
   const generateFixes = useGenerateFixesMutation();
 
@@ -79,11 +86,14 @@ export function ScanPage() {
 
   const onScan = useCallback(
     (input) => {
-      const repoPath = input || 'demo_repo/';
+      const repoPath = input.trim();
+      if (!repoPath) return;
       setTargetRepoPath(repoPath);
       setFixRequested(false);
       setFixError(null);
-      runRequested();
+      setFixingFindingId(null);
+      setAcceptingPatchId(null);
+      runRequested(repoPath);
       send({ repo_path: repoPath });
     },
     [runRequested, send],
@@ -99,6 +109,21 @@ export function ScanPage() {
     () => state.results.some((result) => result?.metadata?.kind === 'patch'),
     [state.results],
   );
+  const acceptedFindingIds = useMemo(
+    () =>
+      new Set(
+        state.results
+          .filter((result) => result?.metadata?.kind === 'patch')
+          .filter((patch) => patch.metadata?.applied || patch.metadata?.accepted)
+          .map((patch) => patch.metadata?.violationCode)
+          .filter(Boolean),
+      ),
+    [state.results],
+  );
+  const remainingViolations = useMemo(
+    () => violations.filter((violation) => !acceptedFindingIds.has(violation.id)),
+    [acceptedFindingIds, violations],
+  );
   const selectedViolation = useMemo(
     () =>
       violations.find((result) => result.id === selectedViolationId) ??
@@ -108,26 +133,66 @@ export function ScanPage() {
   );
   const isRunning = state.status === RUN_STATUSES.RUNNING;
   const isFixing = fixRequested || generateFixes.isPending;
+  const errorMessage = state.error ?? fixError;
+  const actionStateByResultId = useMemo(
+    () => (fixingFindingId ? { [fixingFindingId]: 'fixing' } : {}),
+    [fixingFindingId],
+  );
 
   const requestFixes = useCallback(
-    async (findings) => {
-      if (!targetRepoPath || !findings.length) return;
+    async (findings, fixingId = null, options = {}) => {
+      const repoPath = targetRepoPath || state.repoPath;
+      if (isFixing) return;
+      if (!repoPath) {
+        setFixError('Run a scan before generating fixes for this finding.');
+        return;
+      }
+      if (!findings.length) return;
+      const {
+        apply = false,
+        acceptGeneratedInUi = false,
+        acceptedFindingIds = [],
+        mergePatches = false,
+        rescan = false,
+        patchId = null,
+        acceptInUi = false,
+      } = options;
       setFixRequested(true);
+      setFixingFindingId(fixingId);
+      setAcceptingPatchId(patchId);
       setFixError(null);
       try {
         const summary = await generateFixes.mutateAsync({
-          repoPath: targetRepoPath,
+          repoPath,
           findings,
-          rescan: true,
+          apply,
+          rescan,
         });
-        fixesGenerated(summary);
+        if (apply && !summary.applied) {
+          const failure = summary.failures?.find((item) => item.code === 'apply_unavailable') ??
+            summary.failures?.[0];
+          throw new Error(
+            failure?.message ?? 'The patch could not be accepted.',
+          );
+        }
+        if (rescan && typeof summary.rescan_summary?.score !== 'number') {
+          throw new Error('The patch was generated, but the score could not be refreshed.');
+        }
+        fixesGenerated(summary, {
+          acceptGeneratedPatches: acceptGeneratedInUi,
+          acceptedFindingIds,
+          acceptedPatchId: acceptInUi ? patchId : null,
+          mergePatches,
+        });
       } catch (error) {
         setFixError(error instanceof Error ? error.message : 'Fix generation failed');
       } finally {
         setFixRequested(false);
+        setFixingFindingId(null);
+        setAcceptingPatchId(null);
       }
     },
-    [fixesGenerated, generateFixes, targetRepoPath],
+    [fixesGenerated, generateFixes, isFixing, state.repoPath, targetRepoPath],
   );
 
   const onResultAction = useCallback(
@@ -135,14 +200,49 @@ export function ScanPage() {
       if (actionId !== 'auto-fix') return;
       const finding = violations.find((result) => result.id === resultId);
       if (!finding) return;
-      void requestFixes([finding]);
+      void requestFixes([finding], finding.id, { mergePatches: hasPatches });
     },
-    [requestFixes, violations],
+    [hasPatches, requestFixes, violations],
   );
 
   const onFixAll = useCallback(() => {
-    void requestFixes(violations);
-  }, [requestFixes, violations]);
+    const repoPath = targetRepoPath || state.repoPath;
+    const applyDirectly = canApplyDirectly(repoPath);
+    void requestFixes(remainingViolations, null, {
+      acceptGeneratedInUi: !applyDirectly,
+      acceptedFindingIds: [
+        ...acceptedFindingIds,
+        ...remainingViolations.map((violation) => violation.id),
+      ],
+      apply: applyDirectly,
+      mergePatches: true,
+      rescan: true,
+    });
+  }, [acceptedFindingIds, remainingViolations, requestFixes, state.repoPath, targetRepoPath]);
+
+  const onAcceptPatch = useCallback(
+    (patch) => {
+      const findingId = patch?.metadata?.violationCode;
+      const finding = violations.find((result) => result.id === findingId);
+      if (!finding) {
+        setFixError('The original finding for this patch is no longer available.');
+        return;
+      }
+      const repoPath = targetRepoPath || state.repoPath;
+      const applyDirectly = canApplyDirectly(repoPath);
+      void requestFixes([finding], finding.id, {
+        acceptInUi: !applyDirectly,
+        acceptedFindingIds: applyDirectly
+          ? Array.from(acceptedFindingIds)
+          : [...acceptedFindingIds, finding.id],
+        apply: applyDirectly,
+        mergePatches: true,
+        rescan: true,
+        patchId: patch.id,
+      });
+    },
+    [acceptedFindingIds, requestFixes, state.repoPath, targetRepoPath, violations],
+  );
 
   useEffect(() => {
     if (hasPatches) setFixRequested(false);
@@ -179,7 +279,13 @@ export function ScanPage() {
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[360px_1fr]">
+      {errorMessage && (
+        <div className="glass-subpanel theme-transition flex w-full items-center justify-center rounded-lg border-bad/40 bg-bad/10 p-4 text-center text-sm text-bad">
+          {errorMessage}
+        </div>
+      )}
+
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-y-auto lg:grid-cols-[360px_1fr] lg:overflow-hidden">
         <aside className="flex flex-col gap-5 lg:sticky lg:top-5 lg:self-start">
           <ScanPanel disabled={isRunning} onScan={onScan} />
 
@@ -202,7 +308,7 @@ export function ScanPage() {
           </section>
         </aside>
 
-        <section className="flex min-w-0 min-h-0 flex-col gap-5 overflow-hidden">
+        <section className="flex min-h-0 min-w-0 flex-col gap-5 lg:overflow-y-auto lg:pr-1">
           <div className="grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-[240px_1fr]">
             <ComplianceScore score={state.score} />
 
@@ -220,6 +326,8 @@ export function ScanPage() {
                   result={selectedViolation}
                   onAction={onResultAction}
                   variant="featured"
+                  actionsDisabled={isFixing}
+                  actionStateById={actionStateByResultId}
                 />
               ) : (
                 <div className="glass-subpanel theme-transition rounded-lg border-dashed p-8 text-center text-sm text-text-dim shadow-none">
@@ -235,6 +343,8 @@ export function ScanPage() {
               runId={state.runId}
               status={isFixing ? 'fixing' : 'idle'}
               onFixAll={onFixAll}
+              onAcceptPatch={onAcceptPatch}
+              acceptingPatchId={acceptingPatchId}
             />
           </div>
 
@@ -243,14 +353,10 @@ export function ScanPage() {
             onAction={onResultAction}
             selectedId={selectedViolation?.id}
             onSelect={setSelectedViolationId}
+            actionsDisabled={isFixing}
+            actionStateById={actionStateByResultId}
             compact
           />
-
-          {(state.error || fixError) && (
-            <div className="glass-subpanel theme-transition rounded-lg border-bad/40 bg-bad/10 p-4 text-sm text-bad">
-              {state.error ?? fixError}
-            </div>
-          )}
         </section>
       </main>
     </div>

@@ -25,6 +25,7 @@ SEVERITY_WEIGHTS = {
     Severity.MEDIUM: 5,
     Severity.LOW: 2,
 }
+SCORE_RISK_MULTIPLIER = 1.25
 
 
 class ScanRuntimeSettings(Protocol):
@@ -175,7 +176,9 @@ def _scan_status(total_agents: int, failed_agents: int) -> ScanStatus:
 
 def _score(findings: list[Finding]) -> int:
     penalty = sum(SEVERITY_WEIGHTS[finding.severity] for finding in findings)
-    return max(0, 100 - penalty)
+    if penalty == 0:
+        return 100
+    return round(10000 / (100 + penalty * SCORE_RISK_MULTIPLIER))
 
 
 def _validate_scan_source(source: str, allowed_roots: Sequence[Path]) -> str:

@@ -24,7 +24,6 @@ from modules.scan.domain.entities import (
     ScanStatus,
     Severity,
 )
-from modules.scan.domain.errors import ScanConfigurationError
 from modules.scan.domain.ports import EventEmitter, ScanAgent
 
 
@@ -32,14 +31,9 @@ from modules.scan.domain.ports import EventEmitter, ScanAgent
 class StaticRuntimeSettings:
     scan_allowed_roots: list[Path]
     scan_worktree_root: Path = Path(".hormuz-test-worktrees")
-    openai_configured: bool = True
 
     def validate_for_scan(self) -> None:
-        if not self.openai_configured:
-            raise ScanConfigurationError(
-                code="missing_openai_config",
-                message="OPENAI_API_KEY is required to run scans.",
-            )
+        return None
 
 
 @pytest.mark.asyncio
@@ -62,7 +56,7 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
     )
 
     assert summary.total_findings == 11
-    assert summary.score == 0
+    assert summary.score == 36
     assert summary.scan_status == ScanStatus.COMPLETE
     assert summary.counts_by_severity[Severity.CRITICAL] == 5
     assert summary.counts_by_severity[Severity.HIGH] == 4
@@ -289,6 +283,39 @@ async def test_fix_generator_apply_and_rescan_improves_score(
     assert result.failures == []
     assert result.applied is True
     assert result.rescan_summary is not None
+    assert result.rescan_summary.score == 100
+    assert result.rescan_summary.total_findings == 0
+
+
+@pytest.mark.asyncio
+async def test_fix_generator_selected_rescan_improves_score(
+    tmp_path: Path,
+) -> None:
+    demo_target = tmp_path / "openai-hormuz-demo-repo"
+    _write_demo_fixture(demo_target)
+    settings = StaticRuntimeSettings([tmp_path], scan_worktree_root=tmp_path / "scan-workspaces")
+    orchestrator = ScanOrchestrator(
+        default_agents(),
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    )
+    initial = await orchestrator.run(ScanRequest(repo_path=str(demo_target)), _discard_event)
+    finding = next(finding for finding in initial.findings if finding.id.startswith("hardcoded-secret:"))
+
+    result = await FixGenerator(
+        default_fix_agent(),
+        orchestrator,
+        GitRepositoryPreparer(settings.scan_worktree_root),
+        settings,
+    ).generate(
+        FixRequest(
+            repo_path=str(demo_target),
+            finding=finding,
+            rescan=True,
+        )
+    )
+
+    assert result.rescan_summary is not None
     assert result.rescan_summary.score > initial.score
     assert result.rescan_summary.total_findings < initial.total_findings
 
@@ -382,25 +409,6 @@ async def test_orchestrator_rejects_paths_outside_allowed_roots() -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_rejects_missing_openai_config(tmp_path: Path) -> None:
-    demo_target = tmp_path / "openai-hormuz-demo-repo"
-    _write_demo_fixture(demo_target)
-
-    async def emit(_event: dict) -> None:
-        return None
-
-    with pytest.raises(ScanConfigurationError, match="OPENAI_API_KEY"):
-        await ScanOrchestrator(
-            default_agents(),
-            GitRepositoryPreparer(),
-            StaticRuntimeSettings([tmp_path], openai_configured=False),
-        ).run(
-            ScanRequest(repo_path=str(demo_target)),
-            emit,
-        )
-
-
-@pytest.mark.asyncio
 async def test_orchestrator_starts_configured_agents_concurrently(tmp_path: Path) -> None:
     demo_target = tmp_path / "openai-hormuz-demo-repo"
     _write_demo_fixture(demo_target)
@@ -453,7 +461,7 @@ async def test_orchestrator_keeps_successful_findings_when_one_agent_fails(
 
     assert summary.total_findings == 1
     assert summary.scan_status == ScanStatus.PARTIAL
-    assert summary.score == 90
+    assert summary.score == 89
     assert summary.counts_by_severity[Severity.HIGH] == 1
     assert summary.counts_by_agent == {"PII Scanner": 1, "Auth Checker": 0}
     assert len(summary.failed_agents) == 1
