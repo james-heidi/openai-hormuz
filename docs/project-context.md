@@ -14,8 +14,8 @@ for review.
 - Web UI accepts a local repository path.
 - Backend runs scanner workers in parallel.
 - Progress streams to the frontend over WebSocket.
-- Findings include file, line, severity, category, regulation mapping, and
-  recommendation.
+- Findings include file, line, severity, category, violation type, regulation
+  mapping, and remediation guidance.
 - Standalone demo target contains deterministic violations so the live demo is
   stable: https://github.com/james-heidi/openai-hormuz-demo-repo.
 

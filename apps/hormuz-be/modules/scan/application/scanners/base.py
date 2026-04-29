@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,9 +70,7 @@ class BackendScannerAgent(ScanAgent):
             if file_path.is_file() and file_path.suffix in SOURCE_SUFFIXES:
                 yield file_path
 
-    def find_matches(
-        self, file_path: Path, text: str, repo_path: Path
-    ) -> Iterable[SourceMatch]:
+    def find_matches(self, file_path: Path, text: str, repo_path: Path) -> Iterable[SourceMatch]:
         raise NotImplementedError
 
     def prompt_text(self) -> str | None:
@@ -85,7 +84,7 @@ class BackendScannerAgent(ScanAgent):
             id=f"{match.rule_id}:{relative_path}:{match.line or 0}",
             agent=self.name,
             category=match.category,
-            violation_type=match.violation_type,
+            violation_type=match.violation_type or _violation_type_from_rule_id(match.rule_id),
             severity=match.severity,
             file_path=str(relative_path),
             line=match.line,
@@ -104,3 +103,7 @@ async def emit_update(
 ) -> None:
     update = AgentUpdate(agent=agent, status=status, message=message, progress=progress)
     await emit({"type": "agent_update", "update": update.model_dump(mode="json")})
+
+
+def _violation_type_from_rule_id(rule_id: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "_", rule_id.upper()).strip("_")

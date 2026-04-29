@@ -3,6 +3,7 @@ import re
 
 from modules.scan.application.scanners.api_auditor import ApiAuditorAgent
 from modules.scan.application.scanners.pattern import PatternScanAgent, Rule
+from modules.scan.application.scanners.pii_scanner import PiiScanAgent
 from modules.scan.domain.entities import RegulationRef, Severity
 from modules.scan.domain.ports import ScanAgent
 
@@ -12,7 +13,7 @@ DISABLED_AGENTS_ENV = ("SCAN_DISABLED_AGENTS", "SCAN_DISABLED_SCANNERS")
 
 def default_agents() -> list[ScanAgent]:
     agents: list[ScanAgent] = [
-        PatternScanAgent("PII Scanner", "pii", _pii_rules()),
+        PiiScanAgent(),
         ApiAuditorAgent(),
         PatternScanAgent("Auth Checker", "auth", _auth_rules()),
     ]
@@ -60,36 +61,6 @@ def _app_11() -> RegulationRef:
     )
 
 
-def _pii_rules() -> list[Rule]:
-    return [
-        Rule(
-            id="pii-in-logs",
-            title="PII and password written to logs",
-            category="pii",
-            severity=Severity.CRITICAL,
-            description="The log statement includes email and password values.",
-            recommendation="Log a correlation ID and outcome only. Never log credentials or direct identifiers.",
-            regulations=(_gdpr_32(), _app_11()),
-            predicate=lambda line, _text, _path: "logger." in line
-            and "email" in line
-            and "password" in line,
-        ),
-        Rule(
-            id="third-party-pii-without-consent",
-            title="PII sent to third party without consent boundary",
-            category="pii",
-            severity=Severity.HIGH,
-            description="Personal data is posted to an analytics endpoint without an explicit consent gate.",
-            recommendation="Gate the transfer behind consent and minimize the payload.",
-            regulations=(
-                RegulationRef(framework="GDPR", clause="Article 6", summary="Lawfulness of processing"),
-                RegulationRef(framework="APP", clause="APP 6", summary="Use or disclosure"),
-            ),
-            predicate=lambda line, _text, _path: "analytics.example.com" in line,
-        ),
-    ]
-
-
 def _auth_rules() -> list[Rule]:
     return [
         Rule(
@@ -101,6 +72,7 @@ def _auth_rules() -> list[Rule]:
             recommendation="Read secrets from the runtime environment or a secret manager.",
             regulations=(_gdpr_32(), _app_11()),
             predicate=lambda line, _text, _path: "JWT_SECRET" in line and "secret" in line.lower(),
+            violation_type="HARDCODED_SECRET",
         ),
         Rule(
             id="sql-injection",
@@ -110,7 +82,10 @@ def _auth_rules() -> list[Rule]:
             description="User input is interpolated into SQL.",
             recommendation="Use parameterized queries or an ORM query builder.",
             regulations=(_gdpr_32(), _app_11()),
-            predicate=lambda line, _text, _path: "SELECT *" in line and ("{" in line or "%s" in line),
+            predicate=lambda line, _text, _path: (
+                "SELECT *" in line and ("{" in line or "%s" in line)
+            ),
+            violation_type="SQL_INJECTION",
         ),
         Rule(
             id="missing-admin-auth",
@@ -128,6 +103,7 @@ def _auth_rules() -> list[Rule]:
                 _app_11(),
             ),
             predicate=lambda line, _text, _path: "/admin/all-users" in line,
+            violation_type="MISSING_ADMIN_AUTH",
         ),
         Rule(
             id="plaintext-password-storage",
@@ -138,5 +114,6 @@ def _auth_rules() -> list[Rule]:
             recommendation="Store only salted password hashes using a modern password hashing algorithm.",
             regulations=(_gdpr_32(), _app_11()),
             predicate=lambda line, _text, _path: "password = Column" in line,
+            violation_type="PLAINTEXT_PASSWORD_STORAGE",
         ),
     ]
