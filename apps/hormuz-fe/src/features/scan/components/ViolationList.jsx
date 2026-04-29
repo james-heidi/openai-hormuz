@@ -7,6 +7,10 @@ import { sortBySeverity, tone } from '../lib/severity';
 
 const isViolation = (r) => r?.metadata?.kind !== 'patch';
 
+function clauseLabel(regulation, fallback) {
+  return regulation?.clause ?? regulation?.article ?? regulation?.principle ?? fallback;
+}
+
 export default function ViolationList({
   results,
   onAction,
@@ -86,10 +90,10 @@ export default function ViolationList({
                       </div>
                       <div className="min-w-0 font-mono text-[11px] text-text-dim">
                         <div className="truncate">
-                          {result.metadata?.gdpr?.article ?? 'GDPR'}
+                          {clauseLabel(result.metadata?.gdpr, 'GDPR')}
                         </div>
                         <div className="truncate">
-                          {result.metadata?.app?.principle ?? 'APP'}
+                          {clauseLabel(result.metadata?.app, 'APP')}
                         </div>
                       </div>
                       <div className="flex items-center md:justify-end">

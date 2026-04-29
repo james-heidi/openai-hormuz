@@ -1,80 +1,56 @@
-# codex-subagent-starter
+# Hormuz Frontend
 
-A **generic starter kit** for building React frontends that orchestrate parallel Codex subagents over a WebSocket. **This repo contains no domain logic.** It provides a UI shell, an agent status board, a generic results list, an animated score readout, and a WebSocket hook with a mock-mode fallback so you can `npm run dev` without a backend.
-
-Fork this repo to add your domain.
-
----
+Vite React frontend for Compliance Codex. The UI starts scans over WebSocket,
+renders streamed agent/finding events, and calls the backend REST fix endpoint
+for optional remediation patches.
 
 ## Quickstart
 
+Run from the repo root:
+
 ```bash
-npm install
-npm run dev
+task install
+task be:dev
+task fe:dev
 ```
 
-Open `http://localhost:5173`. By default the UI connects to `/ws/scan` on the
-current host through the Vite proxy. Set `VITE_USE_MOCK=1` to force the
-in-process mock stream, or set `VITE_WS_URL` to point at a different backend.
+Open `http://localhost:3000`.
 
-## What's in here
+## Backend Routing
 
-```
-src/
-├── App.jsx                  # Layout shell, owns top-level state
-├── components/              # Generic, reusable UI primitives
-│   ├── ActionPanel.jsx
-│   ├── AgentBoard.jsx
-│   ├── AgentCard.jsx
-│   ├── ResultList.jsx       # Accepts a `renderItem` prop — the seam a fork uses
-│   ├── ResultItem.jsx
-│   ├── ScoreCard.jsx
-│   └── ConnectionBadge.jsx
-├── hooks/
-│   ├── useRunState.js       # useReducer; single chokepoint for state mutation
-│   └── useWebSocket.js      # connect + reconnect + mock fallback
-└── lib/
-    ├── protocol.js          # Wire-protocol constants + JSDoc typedefs
-    ├── severity.js          # Generic severity rank + tone helpers
-    └── mockServer.js        # Deterministic scripted stream
-```
+The local Vite server proxies backend traffic:
+
+| Frontend path | Backend target |
+| --- | --- |
+| `/api/*` | `http://localhost:4000/api/*` |
+| `/ws/*` | `ws://localhost:4000/ws/*` |
+
+With no frontend env file, scans connect to `/ws/scan` on the current frontend
+host and REST calls use relative `/api/*` paths. This is the expected local
+integration setup.
+
+## Environment Variables
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `VITE_WS_URL` | `/ws/scan` on the current host | Optional full WebSocket URL override. |
+| `VITE_USE_MOCK` | unset | Set to `1` to force the in-process demo stream instead of the backend. |
+| `VITE_MOCK_SPEED` | unset | Set to `fast` to shorten mock stream timings for recordings. |
 
 ## Wire Protocol
 
-The backend WebSocket contract is source of truth. The frontend connects to
-`/ws/scan`, sends the first message as `{ "repo_path": "..." }`, and receives
-direct JSON events with a stable `type` field.
+The backend WebSocket contract is the source of truth. The frontend sends the
+first message as `{ "repo_path": "..." }` and receives direct JSON events with a
+stable `type` field.
 
 | Direction | `type` | Purpose |
-|---|---|---|
-| -> | request body | `{ "repo_path": "..." }` starts a scan |
-| <- | `scan_started` | Backend accepted the scan; lists agents |
-| <- | `agent_update` | Agent flipped `idle` / `running` / `done` / `error` |
-| <- | `finding` | Append a finding to the list |
-| <- | `scan_complete` | Run finished with summary, score, and failures |
-| <- | `error` | Fatal or validation error |
+| --- | --- | --- |
+| -> | request body | `{ "repo_path": "..." }` starts a scan. |
+| <- | `scan_started` | Backend accepted the scan and listed agents. |
+| <- | `agent_update` | Agent status, progress, and message changed. |
+| <- | `finding` | A finding streamed from a scanner. |
+| <- | `scan_complete` | Final summary, score, findings, and failures. |
+| <- | `error` | Fatal validation or runtime error. |
 
-Auto-fix actions use the REST fix endpoint rather than the scan WebSocket.
-
-## Environment variables
-
-| Variable | Default | Effect |
-|---|---|---|
-| `VITE_WS_URL` | `/ws/scan` on current host | Optional full WebSocket URL override. |
-| `VITE_USE_MOCK` | — | Set to `1` to force mock mode even when `VITE_WS_URL` is set. |
-| `VITE_MOCK_SPEED` | — | `fast` halves mock-stream timings. Useful for demo recording. |
-
-## Forking to add a domain
-
-1. Fork to a new repo. Link this repo from your README per hackathon rules.
-2. Add domain components under `src/components/domain/`.
-3. Pass a `renderItem` prop to `ResultList` so each finding renders with your domain card layout — no changes needed in the generic components.
-4. Optionally write a domain-flavoured mock server alongside `mockServer.js` so the UI keeps working offline.
-
-## License
-
-MIT.
-
----
-
-Built for the OpenAI x UTS Hackathon 2026.
+Auto-fix uses `POST /api/scans/fixes`; it can return generated patches and an
+optional rescan summary.
