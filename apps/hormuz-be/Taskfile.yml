@@ -1,0 +1,40 @@
+version: '3'
+
+env:
+  PYTHONPATH: .
+
+x-dotenv: &dotenv ['../../.env.local', '../../.env']
+
+tasks:
+  install:
+    desc: Install Python dependencies from uv.lock.
+    cmds:
+      - uv sync --all-extras --locked
+
+  dev:
+    desc: Start FastAPI with reload on API_PORT or 4000.
+    dotenv: *dotenv
+    cmds:
+      - uv run uvicorn main:app --reload --port ${API_PORT:-4000}
+
+  test:
+    desc: Run unit tests. Extra args after --, e.g. task be:test -- -k scan.
+    dotenv: *dotenv
+    cmds:
+      - uv run --locked --all-extras pytest {{.CLI_ARGS}}
+
+  lint:
+    desc: Lint with ruff.
+    cmds:
+      - uv run --locked --all-extras ruff check
+
+  fmt:
+    desc: Format with ruff.
+    cmds:
+      - uv run --locked --all-extras ruff format
+
+  openapi:dump:
+    desc: Dump FastAPI OpenAPI spec to apps/hormuz-be/openapi.json.
+    dotenv: *dotenv
+    cmds:
+      - uv run --locked --all-extras python scripts/dump_openapi.py

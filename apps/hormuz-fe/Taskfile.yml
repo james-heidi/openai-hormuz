@@ -1,0 +1,28 @@
+version: '3'
+
+tasks:
+  install:
+    desc: Install JS dependencies from pnpm-lock.yaml when present.
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  dev:
+    desc: Start Vite dev server on port 3000.
+    cmds:
+      - pnpm dev
+
+  build:
+    desc: Type-check and production build.
+    cmds:
+      - pnpm build
+
+  lint:
+    desc: Lint with ESLint.
+    cmds:
+      - pnpm lint
+
+  openapi:gen:
+    desc: Regenerate src/lib/openapi.d.ts from apps/hormuz-be/openapi.json.
+    cmds:
+      - pnpm openapi:gen
+

@@ -1,0 +1,26 @@
+[project]
+name = "hormuz-be"
+version = "0.1.0"
+description = "Compliance Codex backend"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.135.3",
+    "pydantic>=2.13.0",
+    "uvicorn[standard]>=0.44.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.14.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+

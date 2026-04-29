@@ -1,0 +1,31 @@
+services:
+  redis:
+    image: redis:8.6.2
+    profiles: [infra]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    profiles: [infra]
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "${JAEGER_OTLP_PORT:-4317}:4317"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      QUERY_UI_CONFIG: /etc/jaeger/ui.json
+    volumes:
+      - ./config/jaeger-ui.json:/etc/jaeger/ui.json:ro
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+
