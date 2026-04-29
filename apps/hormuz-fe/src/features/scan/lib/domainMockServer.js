@@ -7,10 +7,8 @@ import { EVT, AGENT_STATUSES } from './protocol';
  * (scan → 10 violations → score 24 → auto-fix → 5 patches → score 91)
  * without an orchestrator running.
  *
- * Two scripted phases:
- *   1. `run.start`           → 10 violations stream in, score lands at 24
- *   2. `action.invoke`        → 5 patches stream in, score animates to 91
- *      (actionId='auto-fix-all')
+ * Scripted scan phase:
+ *   1. `{ repo_path }`        -> 10 violations stream in, score lands at 24
  *
  * `VITE_MOCK_SPEED=fast` halves all timings for video recording.
  */
@@ -345,6 +343,49 @@ const PATCHES = [
   },
 ];
 
+function agentLabel(agentId) {
+  return AGENTS.find((agent) => agent.id === agentId)?.label ?? agentId;
+}
+
+function findingFromViolation(violation, index) {
+  const [filePath, line] = (violation.location ?? '').split(':');
+  return {
+    id: `${violation.metadata?.violationCode ?? 'mock'}:${filePath}:${line ?? index + 1}`,
+    violation_type: violation.metadata?.violationCode ?? `MOCK_${index + 1}`,
+    agent: agentLabel(violation.agentId),
+    category: violation.agentId?.split('-')[0] ?? 'mock',
+    severity: violation.severity,
+    file_path: filePath,
+    line: line ? Number(line) : null,
+    context: null,
+    title: violation.title,
+    description: violation.description,
+    snippet: null,
+    regulations: [],
+    regulation_warning: null,
+    recommendation: 'Review and apply the recommended remediation.',
+    remediation_hint: 'Review and apply the recommended remediation.',
+  };
+}
+
+function scanSummary(findings) {
+  const countsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+  const countsByAgent = Object.fromEntries(AGENTS.map((agent) => [agent.label, 0]));
+  for (const finding of findings) {
+    countsBySeverity[finding.severity] += 1;
+    countsByAgent[finding.agent] = (countsByAgent[finding.agent] ?? 0) + 1;
+  }
+  return {
+    scan_status: 'complete',
+    score: 24,
+    total_findings: findings.length,
+    counts_by_severity: countsBySeverity,
+    counts_by_agent: countsByAgent,
+    findings,
+    failed_agents: [],
+  };
+}
+
 export function createDomainMockServer() {
   const subscribers = new Set();
   const timers = new Set();
@@ -352,7 +393,7 @@ export function createDomainMockServer() {
   const emit = (type, payload) => {
     for (const cb of subscribers) {
       try {
-        cb({ type, payload });
+        cb({ type, ...payload });
       } catch (err) {
         console.error('[domainMockServer] subscriber threw', err);
       }
@@ -372,127 +413,57 @@ export function createDomainMockServer() {
     timers.clear();
   };
 
-  const playScan = (runId) => {
+  const playScan = (repoPath) => {
     clearAll();
+    const findings = VIOLATIONS.map(findingFromViolation);
 
-    schedule(0, () => emit(EVT.RUN_ACCEPTED, { runId, agents: AGENTS }));
+    schedule(0, () =>
+      emit(EVT.SCAN_STARTED, { repo_path: repoPath, agents: AGENTS.map((agent) => agent.label) }),
+    );
 
     schedule(200, () => {
       for (const a of AGENTS) {
-        emit(EVT.AGENT_STATUS, {
-          runId,
-          agentId: a.id,
-          status: AGENT_STATUSES.RUNNING,
-          message: `Spawning Codex worktree for ${a.label}…`,
+        emit(EVT.AGENT_UPDATE, {
+          update: {
+            agent: a.label,
+            status: AGENT_STATUSES.RUNNING,
+            message: `Spawning Codex worktree for ${a.label}`,
+            progress: 5,
+          },
         });
       }
     });
 
     const VIOL_TIMINGS = [600, 950, 1300, 1700, 2100, 2500, 2900, 3300, 3700, 4100];
-    VIOLATIONS.forEach((v, i) => {
+    findings.forEach((finding, i) => {
       schedule(VIOL_TIMINGS[i], () =>
-        emit(EVT.RESULT_ADD, {
-          runId,
-          agentId: v.agentId,
-          result: {
-            id: `${runId}_v${i + 1}`,
-            agentId: v.agentId,
-            title: v.title,
-            description: v.description,
-            severity: v.severity,
-            location: v.location,
-            metadata: v.metadata,
-            actions: v.actions,
-          },
+        emit(EVT.FINDING, {
+          finding,
         }),
       );
     });
-
-    schedule(4500, () => emit(EVT.SCORE_UPDATE, { runId, score: 24 }));
 
     schedule(4700, () => {
       for (const a of AGENTS) {
-        emit(EVT.AGENT_STATUS, {
-          runId,
-          agentId: a.id,
-          status: AGENT_STATUSES.DONE,
-          message: 'Scan complete.',
-        });
-      }
-    });
-
-    schedule(4800, () => emit(EVT.RUN_COMPLETE, { runId }));
-  };
-
-  const playAutoFix = (runId) => {
-    clearAll();
-
-    schedule(200, () => {
-      for (const a of AGENTS) {
-        emit(EVT.AGENT_STATUS, {
-          runId,
-          agentId: a.id,
-          status: AGENT_STATUSES.RUNNING,
-          message: 'Generating patches in isolated worktrees…',
-        });
-      }
-    });
-
-    const PATCH_TIMINGS = [700, 1200, 1700, 2200, 2700];
-    PATCHES.forEach((p, i) => {
-      schedule(PATCH_TIMINGS[i], () =>
-        emit(EVT.RESULT_ADD, {
-          runId,
-          agentId: 'auth-checker', // attribution — any agent fine
-          result: {
-            id: `${runId}_p${i + 1}`,
-            agentId: 'auth-checker',
-            title: p.title,
-            severity: undefined,
-            location: p.file,
-            metadata: {
-              kind: 'patch',
-              violationCode: p.violationCode,
-              file: p.file,
-              diffLines: p.diffLines,
-            },
-            actions: [{ label: 'Apply', actionId: 'apply-patch' }],
+        emit(EVT.AGENT_UPDATE, {
+          update: {
+            agent: a.label,
+            status: AGENT_STATUSES.DONE,
+            message: 'Scan complete.',
+            progress: 100,
           },
-        }),
-      );
-    });
-
-    schedule(3300, () =>
-      emit(EVT.SCORE_UPDATE, { runId, score: 91, prev: 24 }),
-    );
-
-    schedule(3500, () => {
-      for (const a of AGENTS) {
-        emit(EVT.AGENT_STATUS, {
-          runId,
-          agentId: a.id,
-          status: AGENT_STATUSES.DONE,
-          message: 'Patches generated.',
         });
       }
     });
 
-    schedule(3700, () => emit(EVT.RUN_COMPLETE, { runId }));
+    schedule(4800, () => emit(EVT.SCAN_COMPLETE, { summary: scanSummary(findings) }));
   };
 
   return {
     send(msg) {
       if (!msg || typeof msg !== 'object') return;
-      if (msg.type === EVT.RUN_START) {
-        playScan(msg.payload?.runId ?? `mock_${Date.now()}`);
-      } else if (msg.type === EVT.RUN_CANCEL) {
-        clearAll();
-      } else if (msg.type === EVT.ACTION_INVOKE) {
-        const { actionId, runId } = msg.payload ?? {};
-        if (actionId === 'auto-fix-all' && runId) {
-          playAutoFix(runId);
-        }
-        // Single-violation auto-fix and suppress are no-ops in the mock.
+      if (msg.repo_path) {
+        playScan(msg.repo_path);
       }
     },
     subscribe(cb) {

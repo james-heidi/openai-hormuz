@@ -40,6 +40,32 @@ export type ScanSummary = {
   failed_agents: { agent: string; message: string }[]
 }
 
+export type FixPatch = {
+  finding_id: string
+  file_path: string
+  diff: string
+  patch_path: string | null
+  applied: boolean
+}
+
+export type FixFailure = {
+  finding_id?: string | null
+  file_path?: string | null
+  code: string
+  message: string
+}
+
+export type FixSummary = {
+  output_type: 'local_diff' | 'github_pr'
+  pr_url: string | null
+  patch_path: string | null
+  diff: string
+  patches: FixPatch[]
+  failures: FixFailure[]
+  applied: boolean
+  rescan_summary: ScanSummary | null
+}
+
 export type AgentUpdate = {
   agent: string
   status: AgentStatus

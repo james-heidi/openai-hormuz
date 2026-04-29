@@ -13,9 +13,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. With no `VITE_WS_URL` configured the UI runs against an in-process mock server — the badge in the header reads `MOCK`. Click **Run** to play a deterministic ~6-second stream.
-
-To wire up a real backend, copy `.env.example` to `.env.local` and set `VITE_WS_URL`.
+Open `http://localhost:5173`. By default the UI connects to `/ws/scan` on the
+current host through the Vite proxy. Set `VITE_USE_MOCK=1` to force the
+in-process mock stream, or set `VITE_WS_URL` to point at a different backend.
 
 ## What's in here
 
@@ -39,29 +39,28 @@ src/
     └── mockServer.js        # Deterministic scripted stream
 ```
 
-## Wire protocol
+## Wire Protocol
 
-All messages: `{ type: string, payload: object }`. Source of truth is [`src/lib/protocol.js`](src/lib/protocol.js).
+The backend WebSocket contract is source of truth. The frontend connects to
+`/ws/scan`, sends the first message as `{ "repo_path": "..." }`, and receives
+direct JSON events with a stable `type` field.
 
 | Direction | `type` | Purpose |
 |---|---|---|
-| → | `run.start` | Begin a run with an input string |
-| → | `run.cancel` | Abort the current run |
-| → | `action.invoke` | Invoke an action attached to a result |
-| ← | `run.accepted` | Server confirms run; lists agents |
-| ← | `agent.status` | Agent flipped `idle` / `running` / `done` / `error` |
-| ← | `result.add` | Append a finding to the list |
-| ← | `score.update` | Update the score readout |
-| ← | `run.complete` | Run finished |
-| ← | `run.error` | Fatal error |
+| -> | request body | `{ "repo_path": "..." }` starts a scan |
+| <- | `scan_started` | Backend accepted the scan; lists agents |
+| <- | `agent_update` | Agent flipped `idle` / `running` / `done` / `error` |
+| <- | `finding` | Append a finding to the list |
+| <- | `scan_complete` | Run finished with summary, score, and failures |
+| <- | `error` | Fatal or validation error |
 
-Findings carry an open `metadata` object and an optional `actions` array — these are the seams a domain layer fills in without changing the protocol.
+Auto-fix actions use the REST fix endpoint rather than the scan WebSocket.
 
 ## Environment variables
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VITE_WS_URL` | — | If set, the hook connects here. Otherwise mock mode is on. |
+| `VITE_WS_URL` | `/ws/scan` on current host | Optional full WebSocket URL override. |
 | `VITE_USE_MOCK` | — | Set to `1` to force mock mode even when `VITE_WS_URL` is set. |
 | `VITE_MOCK_SPEED` | — | `fast` halves mock-stream timings. Useful for demo recording. |
 

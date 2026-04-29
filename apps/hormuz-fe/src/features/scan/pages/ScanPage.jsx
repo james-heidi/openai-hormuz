@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { useRunState } from '../hooks/useRunState';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { AGENT_STATUSES, EVT, RUN_STATUSES } from '../lib/protocol';
+import { AGENT_STATUSES, RUN_STATUSES } from '../lib/protocol';
 import { createDomainMockServer } from '../lib/domainMockServer';
 import { sortBySeverity } from '../lib/severity';
+import { useGenerateFixesMutation } from '../mutations';
 
 import ScanPanel from '../components/ScanPanel';
 import AgentStatusBoard from '../components/AgentStatusBoard';
@@ -16,6 +17,11 @@ import ConnectionBadge from '../../../components/ConnectionBadge';
 import ThemeToggle from '../../../components/ThemeToggle';
 
 const isViolation = (result) => result?.metadata?.kind !== 'patch';
+
+function defaultSocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/scan`;
+}
 
 function getAgentSummary(agents) {
   if (!agents.length) {
@@ -54,12 +60,15 @@ function getAgentSummary(agents) {
 }
 
 export function ScanPage() {
-  const wsUrl = import.meta.env.VITE_WS_URL || '';
-  const useMock = import.meta.env.VITE_USE_MOCK === '1' || !wsUrl;
+  const wsUrl = import.meta.env.VITE_WS_URL || defaultSocketUrl();
+  const useMock = import.meta.env.VITE_USE_MOCK === '1';
 
-  const [state, { handleEvent, runRequested }] = useRunState();
+  const [state, { fixesGenerated, handleEvent, runRequested }] = useRunState();
   const [selectedViolationId, setSelectedViolationId] = useState(null);
   const [fixRequested, setFixRequested] = useState(false);
+  const [fixError, setFixError] = useState(null);
+  const [targetRepoPath, setTargetRepoPath] = useState('');
+  const generateFixes = useGenerateFixesMutation();
 
   const { status: connectionStatus, retryCount, maxRetries, send } = useWebSocket({
     url: wsUrl,
@@ -70,35 +79,15 @@ export function ScanPage() {
 
   const onScan = useCallback(
     (input) => {
+      const repoPath = input || 'demo_repo/';
+      setTargetRepoPath(repoPath);
       setFixRequested(false);
-      const runId = runRequested();
-      send({
-        type: EVT.RUN_START,
-        payload: { runId, input: input || 'demo_repo/' },
-      });
+      setFixError(null);
+      runRequested();
+      send({ repo_path: repoPath });
     },
     [runRequested, send],
   );
-
-  const onResultAction = useCallback(
-    (actionId, resultId) => {
-      if (!state.runId) return;
-      send({
-        type: EVT.ACTION_INVOKE,
-        payload: { runId: state.runId, actionId, params: { resultId } },
-      });
-    },
-    [send, state.runId],
-  );
-
-  const onFixAll = useCallback(() => {
-    if (!state.runId) return;
-    setFixRequested(true);
-    send({
-      type: EVT.ACTION_INVOKE,
-      payload: { runId: state.runId, actionId: 'auto-fix-all' },
-    });
-  }, [send, state.runId]);
 
   const agentList = useMemo(() => Object.values(state.agents), [state.agents]);
   const agentSummary = useMemo(() => getAgentSummary(agentList), [agentList]);
@@ -118,6 +107,42 @@ export function ScanPage() {
     [selectedViolationId, violations],
   );
   const isRunning = state.status === RUN_STATUSES.RUNNING;
+  const isFixing = fixRequested || generateFixes.isPending;
+
+  const requestFixes = useCallback(
+    async (findings) => {
+      if (!targetRepoPath || !findings.length) return;
+      setFixRequested(true);
+      setFixError(null);
+      try {
+        const summary = await generateFixes.mutateAsync({
+          repoPath: targetRepoPath,
+          findings,
+          rescan: true,
+        });
+        fixesGenerated(summary);
+      } catch (error) {
+        setFixError(error instanceof Error ? error.message : 'Fix generation failed');
+      } finally {
+        setFixRequested(false);
+      }
+    },
+    [fixesGenerated, generateFixes, targetRepoPath],
+  );
+
+  const onResultAction = useCallback(
+    (actionId, resultId) => {
+      if (actionId !== 'auto-fix') return;
+      const finding = violations.find((result) => result.id === resultId);
+      if (!finding) return;
+      void requestFixes([finding]);
+    },
+    [requestFixes, violations],
+  );
+
+  const onFixAll = useCallback(() => {
+    void requestFixes(violations);
+  }, [requestFixes, violations]);
 
   useEffect(() => {
     if (hasPatches) setFixRequested(false);
@@ -208,7 +233,7 @@ export function ScanPage() {
             <FixPanel
               results={state.results}
               runId={state.runId}
-              status={fixRequested ? 'fixing' : 'idle'}
+              status={isFixing ? 'fixing' : 'idle'}
               onFixAll={onFixAll}
             />
           </div>
@@ -221,9 +246,9 @@ export function ScanPage() {
             compact
           />
 
-          {state.status === RUN_STATUSES.ERROR && state.error && (
+          {(state.error || fixError) && (
             <div className="glass-subpanel theme-transition rounded-lg border-bad/40 bg-bad/10 p-4 text-sm text-bad">
-              {state.error}
+              {state.error ?? fixError}
             </div>
           )}
         </section>
