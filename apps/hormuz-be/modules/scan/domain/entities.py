@@ -28,14 +28,17 @@ class Finding(BaseModel):
     id: str
     agent: str
     category: str
+    violation_type: str | None = None
     severity: Severity
     file_path: str
     line: int | None = None
+    context: str | None = None
     title: str
     description: str
     snippet: str | None = None
     regulations: list[RegulationRef] = Field(default_factory=list)
     recommendation: str
+    remediation_hint: str | None = None
 
 
 class ScanRequest(BaseModel):
@@ -59,4 +62,3 @@ class ScanSummary(BaseModel):
 class ErrorDetail(BaseModel):
     code: str
     message: str
-

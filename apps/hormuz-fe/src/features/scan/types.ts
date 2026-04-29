@@ -11,14 +11,17 @@ export type Finding = {
   id: string
   agent: string
   category: string
+  violation_type: string | null
   severity: Severity
   file_path: string
   line: number | null
+  context: string | null
   title: string
   description: string
   snippet: string | null
   regulations: RegulationRef[]
   recommendation: string
+  remediation_hint: string | null
 }
 
 export type ScanSummary = {
@@ -41,4 +44,3 @@ export type ScanEvent =
   | { type: 'finding'; finding: Finding }
   | { type: 'scan_complete'; summary: ScanSummary }
   | { type: 'error'; detail: { code: string; message: string } }
-

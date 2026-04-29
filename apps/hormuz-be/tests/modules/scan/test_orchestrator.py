@@ -8,6 +8,7 @@ from modules.scan.adapters.outbound.git_repository import GitRepositoryPreparer
 from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.application.rule_catalog import default_agents
+from modules.scan.application.scanners.api_auditor import API_OVEREXPOSURE, ApiAuditorAgent
 from modules.scan.domain.entities import ScanRequest, Severity
 from modules.scan.domain.errors import ScanConfigurationError
 
@@ -44,13 +45,33 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
         emit,
     )
 
-    assert summary.total_findings == 10
+    assert summary.total_findings == 11
     assert summary.counts_by_severity[Severity.CRITICAL] == 5
-    assert summary.counts_by_severity[Severity.HIGH] == 3
+    assert summary.counts_by_severity[Severity.HIGH] == 4
     assert summary.counts_by_severity[Severity.MEDIUM] == 2
     assert events[0]["type"] == "scan_started"
     assert events[-1]["type"] == "scan_complete"
     assert not list(scan_storage.iterdir())
+
+    overexposure_findings = [
+        finding for finding in summary.findings if finding.violation_type == API_OVEREXPOSURE
+    ]
+    assert len(overexposure_findings) == 2
+    assert {
+        finding.context for finding in overexposure_findings
+    } == {
+        "GET /admin/all-users -> get_all_users; model User",
+        "GET /users/{id} -> get_user; model User",
+    }
+    for finding in overexposure_findings:
+        assert finding.agent == "API Auditor"
+        assert finding.category == "api"
+        assert finding.severity == Severity.HIGH
+        assert finding.file_path == "api/users.py"
+        assert finding.line is not None
+        assert finding.description
+        assert finding.remediation_hint
+        assert finding.regulations
 
 
 @pytest.mark.asyncio
@@ -86,6 +107,15 @@ async def test_orchestrator_rejects_missing_openai_config(tmp_path: Path) -> Non
             ScanRequest(repo_path=str(demo_target)),
             emit,
         )
+
+
+def test_api_auditor_prompt_forces_structured_json() -> None:
+    prompt = ApiAuditorAgent().prompt_text()
+
+    assert prompt is not None
+    assert "Return only valid JSON" in prompt
+    assert API_OVEREXPOSURE in prompt
+    assert '"findings"' in prompt
 
 
 def _write_demo_fixture(repo_path: Path) -> None:
