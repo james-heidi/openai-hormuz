@@ -49,6 +49,8 @@ tasks. FastAPI app code does not load dotenv files directly.
 | `OPENAI_BASE_URL` | No | Optional OpenAI-compatible API base URL. |
 | `SCAN_ALLOWED_ROOTS` | No | Colon-separated directories the scanner may read. Defaults to this repo root. |
 | `SCAN_WORKTREE_ROOT` | No | Directory reserved for GitPython worktree operations. Defaults to `.worktrees`. |
+| `SCAN_ENABLED_AGENTS` / `SCAN_ENABLED_SCANNERS` | No | Optional comma-separated allowlist of scanner names or categories. For example, `pii,api` runs the MVP without Auth Checker. |
+| `SCAN_DISABLED_AGENTS` / `SCAN_DISABLED_SCANNERS` | No | Optional comma-separated denylist of scanner names or categories. For example, `auth` disables Auth Checker. |
 | `CORS_ORIGINS` | No | Comma-separated frontend origins. Defaults to `http://localhost:3000`. |
 | `GITHUB_TOKEN` | No | Enables optional GitHub PR creation only when paired with `GITHUB_REPOSITORY`. |
 | `GITHUB_REPOSITORY` | No | Repository slug for optional PR creation, for example `owner/repo`. |
