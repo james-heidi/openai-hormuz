@@ -1,0 +1,58 @@
+version: '3'
+
+dotenv: ['.env.local', '.env']
+
+includes:
+  be:
+    taskfile: ./apps/hormuz-be/Taskfile.yml
+    dir: ./apps/hormuz-be
+  fe:
+    taskfile: ./apps/hormuz-fe/Taskfile.yml
+    dir: ./apps/hormuz-fe
+
+tasks:
+  install:
+    desc: Install backend and frontend dependencies from lockfiles when present.
+    cmds:
+      - task: be:install
+      - task: fe:install
+
+  dev:
+    desc: Start backend and frontend in separate terminals via be:dev and fe:dev.
+    cmds:
+      - echo "Run task be:dev and task fe:dev in separate terminals."
+
+  infra:up:
+    desc: Start optional local infrastructure.
+    cmds:
+      - docker compose --profile infra up -d
+
+  infra:down:
+    desc: Stop optional local infrastructure and remove volumes.
+    prompt: This will stop local infra containers and delete volumes. Continue?
+    cmds:
+      - docker compose --profile infra down -v --remove-orphans
+
+  infra:status:
+    desc: Show local infrastructure status.
+    cmds:
+      - docker compose ps
+
+  openapi:sync:
+    desc: Dump backend OpenAPI and regenerate frontend TypeScript types.
+    cmds:
+      - task: be:openapi:dump
+      - task: fe:openapi:gen
+
+  test:
+    desc: Run backend tests and frontend build checks.
+    cmds:
+      - task: be:test
+      - task: fe:build
+
+  kill:
+    desc: Kill local app processes on the default frontend and backend ports.
+    cmds:
+      - cmd: lsof -ti:3000,4000 | xargs kill -9 2>/dev/null || true
+      - echo "App processes killed"
+
