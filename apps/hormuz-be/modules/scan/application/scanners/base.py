@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from modules.scan.domain.entities import AgentStatus, AgentUpdate, Finding, RegulationRef, Severity
+from modules.scan.domain.entities import AgentStatus, AgentUpdate, Finding, Severity
 from modules.scan.domain.ports import EventEmitter, ScanAgent
 
 SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
@@ -19,7 +19,6 @@ class SourceMatch:
     severity: Severity
     description: str
     recommendation: str
-    regulations: tuple[RegulationRef, ...]
     file_path: Path
     line: int | None = None
     snippet: str | None = None
@@ -92,7 +91,6 @@ class BackendScannerAgent(ScanAgent):
             title=match.title,
             description=match.description,
             snippet=match.snippet,
-            regulations=list(match.regulations),
             recommendation=match.recommendation,
             remediation_hint=match.remediation_hint or match.recommendation,
         )

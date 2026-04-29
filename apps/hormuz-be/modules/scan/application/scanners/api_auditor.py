@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from modules.scan.application.scanners.base import BackendScannerAgent, SourceMatch
-from modules.scan.domain.entities import RegulationRef, Severity
+from modules.scan.domain.entities import Severity
 
 API_OVEREXPOSURE = "API_OVEREXPOSURE"
 
@@ -50,7 +50,6 @@ class ApiAuditorAgent(BackendScannerAgent):
                     severity=Severity.HIGH,
                     description=description,
                     recommendation="Return an explicit response DTO with only the fields required by the caller.",
-                    regulations=(_gdpr_data_minimisation(), _app_collection_and_use()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -71,7 +70,6 @@ class ApiAuditorAgent(BackendScannerAgent):
                     severity=Severity.HIGH,
                     description="Exception details and tracebacks are returned to callers.",
                     recommendation="Return a stable error code and log the traceback server-side.",
-                    regulations=(_gdpr_32(), _app_11()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -88,7 +86,6 @@ class ApiAuditorAgent(BackendScannerAgent):
                     severity=Severity.MEDIUM,
                     description="The model has no retention timestamp or deletion policy marker.",
                     recommendation="Add retention metadata and a deletion workflow.",
-                    regulations=(_gdpr_storage_limitation(), _app_11()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -105,7 +102,6 @@ class ApiAuditorAgent(BackendScannerAgent):
                     severity=Severity.MEDIUM,
                     description="CORS allows all origins.",
                     recommendation="Restrict CORS to known frontend origins.",
-                    regulations=(_gdpr_32(), _app_11()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -175,43 +171,3 @@ def _combine_context(context: str | None, model: str | None) -> str | None:
     if context and model:
         return f"{context}; model {model}"
     return context or (f"model {model}" if model else None)
-
-
-def _gdpr_data_minimisation() -> RegulationRef:
-    return RegulationRef(
-        framework="GDPR",
-        clause="Article 5(1)(c)",
-        summary="Data minimisation",
-    )
-
-
-def _gdpr_storage_limitation() -> RegulationRef:
-    return RegulationRef(
-        framework="GDPR",
-        clause="Article 5(1)(e)",
-        summary="Storage limitation",
-    )
-
-
-def _gdpr_32() -> RegulationRef:
-    return RegulationRef(
-        framework="GDPR",
-        clause="Article 32",
-        summary="Security of processing",
-    )
-
-
-def _app_collection_and_use() -> RegulationRef:
-    return RegulationRef(
-        framework="APP",
-        clause="APP 3 and APP 6",
-        summary="Collection and use",
-    )
-
-
-def _app_11() -> RegulationRef:
-    return RegulationRef(
-        framework="APP",
-        clause="APP 11",
-        summary="Security of personal information",
-    )

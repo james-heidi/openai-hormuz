@@ -4,14 +4,18 @@ export type AgentStatus = 'idle' | 'running' | 'done' | 'error'
 export type RegulationRef = {
   framework: 'GDPR' | 'APP'
   clause: string
+  title: string
   summary: string
+  requirement: string
+  max_penalty: string
+  severity: Severity
 }
 
 export type Finding = {
   id: string
+  violation_type: string
   agent: string
   category: string
-  violation_type: string
   severity: Severity
   file_path: string
   line: number | null
@@ -20,6 +24,7 @@ export type Finding = {
   description: string
   snippet: string | null
   regulations: RegulationRef[]
+  regulation_warning: string | null
   recommendation: string
   remediation_hint: string
 }

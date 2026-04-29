@@ -4,6 +4,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, Protocol
 
+from modules.scan.application.regulation_mapper import attach_regulation_metadata
 from modules.scan.application.repositories import RepositoryPreparationError, RepositoryPreparer
 from modules.scan.domain.entities import (
     AgentStatus,
@@ -64,7 +65,10 @@ class ScanOrchestrator:
                 )
             )
         findings = sorted(
-            chain.from_iterable(results),
+            (
+                attach_regulation_metadata(finding)
+                for finding in chain.from_iterable(results)
+            ),
             key=lambda finding: (finding.file_path, finding.line or 0, finding.id),
         )
 
@@ -99,6 +103,7 @@ class _ScanRunEvents:
     async def emit(self, event: dict[str, Any]) -> None:
         async with self._lock:
             if event.get("type") == "finding":
+                event = _enriched_finding_event(event)
                 finding = event.get("finding")
                 finding_id = finding.get("id") if isinstance(finding, dict) else None
                 if finding_id in self._emitted_finding_ids:
@@ -115,6 +120,17 @@ class _ScanRunEvents:
 
     async def emit_finding(self, finding: Finding) -> None:
         await self.emit({"type": "finding", "finding": finding.model_dump(mode="json")})
+
+
+def _enriched_finding_event(event: dict[str, Any]) -> dict[str, Any]:
+    finding = event.get("finding")
+    if isinstance(finding, Finding):
+        enriched = attach_regulation_metadata(finding)
+    elif isinstance(finding, dict):
+        enriched = attach_regulation_metadata(Finding.model_validate(finding))
+    else:
+        return event
+    return {**event, "finding": enriched.model_dump(mode="json")}
 
 
 def _counts_by_severity(findings: list[Finding]) -> dict[Severity, int]:

@@ -80,6 +80,10 @@
             "type": "string",
             "title": "Id"
           },
+          "violation_type": {
+            "type": "string",
+            "title": "Violation Type"
+          },
           "agent": {
             "type": "string",
             "title": "Agent"
@@ -87,10 +91,6 @@
           "category": {
             "type": "string",
             "title": "Category"
-          },
-          "violation_type": {
-            "type": "string",
-            "title": "Violation Type"
           },
           "severity": {
             "$ref": "#/components/schemas/Severity"
@@ -147,6 +147,17 @@
             "type": "array",
             "title": "Regulations"
           },
+          "regulation_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulation Warning"
+          },
           "recommendation": {
             "type": "string",
             "title": "Recommendation"
@@ -159,9 +170,9 @@
         "type": "object",
         "required": [
           "id",
+          "violation_type",
           "agent",
           "category",
-          "violation_type",
           "severity",
           "file_path",
           "title",
@@ -198,16 +209,35 @@
             "type": "string",
             "title": "Clause"
           },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
           "summary": {
             "type": "string",
             "title": "Summary"
+          },
+          "requirement": {
+            "type": "string",
+            "title": "Requirement"
+          },
+          "max_penalty": {
+            "type": "string",
+            "title": "Max Penalty"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
           }
         },
         "type": "object",
         "required": [
           "framework",
           "clause",
-          "summary"
+          "title",
+          "summary",
+          "requirement",
+          "max_penalty",
+          "severity"
         ],
         "title": "RegulationRef"
       },

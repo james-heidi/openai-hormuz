@@ -21,14 +21,18 @@ class AgentStatus(StrEnum):
 class RegulationRef(BaseModel):
     framework: Literal["GDPR", "APP"]
     clause: str
+    title: str
     summary: str
+    requirement: str
+    max_penalty: str
+    severity: Severity
 
 
 class Finding(BaseModel):
     id: str
+    violation_type: str
     agent: str
     category: str
-    violation_type: str
     severity: Severity
     file_path: str
     line: int | None = None
@@ -37,6 +41,7 @@ class Finding(BaseModel):
     description: str
     snippet: str | None = None
     regulations: list[RegulationRef] = Field(default_factory=list)
+    regulation_warning: str | None = None
     recommendation: str
     remediation_hint: str
 
