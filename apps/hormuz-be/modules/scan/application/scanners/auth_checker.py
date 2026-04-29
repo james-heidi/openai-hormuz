@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from modules.scan.application.scanners.base import BackendScannerAgent, SourceMatch
-from modules.scan.domain.entities import RegulationRef, Severity
+from modules.scan.domain.entities import Severity
 
 HARDCODED_SECRET = "HARDCODED_SECRET"
 SQL_INJECTION = "SQL_INJECTION"
@@ -58,7 +58,6 @@ class AuthCheckerAgent(BackendScannerAgent):
                     severity=Severity.CRITICAL,
                     description="A JWT secret is committed directly in source code.",
                     recommendation="Read secrets from the runtime environment or a secret manager.",
-                    regulations=(_gdpr_32(), _app_11()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -75,7 +74,6 @@ class AuthCheckerAgent(BackendScannerAgent):
                     severity=Severity.CRITICAL,
                     description="User input is interpolated into SQL.",
                     recommendation="Use parameterized queries or an ORM query builder.",
-                    regulations=(_gdpr_32(), _app_11()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -93,14 +91,6 @@ class AuthCheckerAgent(BackendScannerAgent):
                     severity=Severity.CRITICAL,
                     description="The admin route returns all users without an auth dependency.",
                     recommendation="Require an admin permission dependency before returning user records.",
-                    regulations=(
-                        RegulationRef(
-                            framework="GDPR",
-                            clause="Article 25",
-                            summary="Data protection by design and by default",
-                        ),
-                        _app_11(),
-                    ),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -119,7 +109,6 @@ class AuthCheckerAgent(BackendScannerAgent):
                     recommendation=(
                         "Store only salted password hashes using a modern password hashing algorithm."
                     ),
-                    regulations=(_gdpr_32(), _app_11()),
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),
@@ -169,19 +158,3 @@ def _has_auth_boundary(lines: list[str], index: int) -> bool:
     nearby = "\n".join(lines[max(index - 3, 0) : index + 9])
     nearby_lower = nearby.lower()
     return any(token.lower() in nearby_lower for token in AUTH_BOUNDARY_TOKENS)
-
-
-def _gdpr_32() -> RegulationRef:
-    return RegulationRef(
-        framework="GDPR",
-        clause="Article 32",
-        summary="Security of processing",
-    )
-
-
-def _app_11() -> RegulationRef:
-    return RegulationRef(
-        framework="APP",
-        clause="APP 11",
-        summary="Security of personal information",
-    )

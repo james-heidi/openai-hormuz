@@ -8,7 +8,16 @@ const AGENT_LABELS = {
   'auth-checker': 'Auth Checker',
 };
 
-function ClausePanel({ kind, badge, badgeHref, title, summary, fine, divider = false }) {
+function ClausePanel({
+  kind,
+  badge,
+  badgeHref,
+  title,
+  summary,
+  requirement,
+  fine,
+  divider = false,
+}) {
   return (
     <div className={clsx('min-w-0', divider && 'md:border-l md:border-border md:pl-4')}>
       <div className="flex flex-col gap-2">
@@ -25,17 +34,47 @@ function ClausePanel({ kind, badge, badgeHref, title, summary, fine, divider = f
           {summary}
         </p>
       )}
+      {requirement && requirement !== summary && (
+        <p className="line-clamp-3 text-[11px] leading-relaxed text-text-dim">
+          {requirement}
+        </p>
+      )}
     </div>
   );
+}
+
+function locationFor(result) {
+  if (result.location) return result.location;
+  if (!result.file_path) return null;
+  return result.line ? `${result.file_path}:${result.line}` : result.file_path;
+}
+
+function metadataFor(result) {
+  const metadata = result.metadata ?? {};
+  const regulations = Array.isArray(result.regulations) ? result.regulations : [];
+  return {
+    metadata,
+    gdpr: metadata.gdpr ?? regulations.find((r) => r.framework === 'GDPR'),
+    app: metadata.app ?? regulations.find((r) => r.framework === 'APP'),
+  };
+}
+
+function regulationClause(regulation, fallback) {
+  return regulation?.article ?? regulation?.principle ?? regulation?.clause ?? fallback;
+}
+
+function regulationFine(regulation) {
+  return regulation?.fine ?? regulation?.max_penalty;
 }
 
 export default function ViolationCard({ result, onAction, variant = 'default' }) {
   if (!result) return null;
   const sev = result.severity;
-  const m = result.metadata ?? {};
-  const gdpr = m.gdpr;
-  const app = m.app;
+  const { metadata: m, gdpr, app } = metadataFor(result);
   const featured = variant === 'featured';
+  const location = locationFor(result);
+  const violationCode = m.violationCode ?? result.violation_type;
+  const agentLabel = AGENT_LABELS[result.agentId] ?? result.agent ?? result.agentId;
 
   return (
     <article className={featured ? 'min-w-0' : 'glass-panel theme-transition rounded-lg p-4'}>
@@ -56,9 +95,9 @@ export default function ViolationCard({ result, onAction, variant = 'default' })
               {result.title}
             </h3>
           </div>
-          {result.location && (
+          {location && (
             <div className="mt-1 truncate font-mono text-[11px] text-text-dim">
-              {result.location}
+              {location}
             </div>
           )}
           {result.description && (
@@ -69,11 +108,11 @@ export default function ViolationCard({ result, onAction, variant = 'default' })
         </div>
         <div className="shrink-0 text-right">
           <div className="text-[10px] uppercase tracking-wider text-text-dim/80">
-            {AGENT_LABELS[result.agentId] ?? result.agentId}
+            {agentLabel}
           </div>
-          {m.violationCode && (
+          {violationCode && (
             <div className="mt-0.5 font-mono text-[10px] text-text-dim/70">
-              {m.violationCode}
+              {violationCode}
             </div>
           )}
         </div>
@@ -84,25 +123,33 @@ export default function ViolationCard({ result, onAction, variant = 'default' })
           {gdpr && (
             <ClausePanel
               kind="gdpr"
-              badge={`GDPR · ${gdpr.article}`}
+              badge={`GDPR · ${regulationClause(gdpr, 'GDPR')}`}
               badgeHref={gdpr.url}
               title={gdpr.title}
               summary={gdpr.summary}
-              fine={gdpr.fine}
+              requirement={gdpr.requirement}
+              fine={regulationFine(gdpr)}
             />
           )}
           {app && (
             <ClausePanel
               kind="app"
-              badge={`AU Privacy · ${app.principle}`}
+              badge={`AU Privacy · ${regulationClause(app, 'APP')}`}
               badgeHref={app.url}
               title={app.title}
               summary={app.summary}
-              fine={app.fine}
+              requirement={app.requirement}
+              fine={regulationFine(app)}
               divider={Boolean(gdpr)}
             />
           )}
         </div>
+      )}
+
+      {result.regulation_warning && (
+        <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-warn">
+          {result.regulation_warning}
+        </p>
       )}
 
       {Array.isArray(result.actions) && result.actions.length > 0 && (

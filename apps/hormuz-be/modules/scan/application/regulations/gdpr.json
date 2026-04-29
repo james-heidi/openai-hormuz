@@ -1,0 +1,109 @@
+{
+  "framework": "GDPR",
+  "mappings": {
+    "PII_IN_LOGS": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Apply appropriate technical and organisational measures to protect personal data confidentiality, integrity, availability, and resilience.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "critical"
+    },
+    "API_OVEREXPOSURE": {
+      "clause": "Article 5(1)(c)",
+      "title": "Data minimisation",
+      "summary": "Data minimisation",
+      "requirement": "Ensure personal data is adequate, relevant, and limited to what is necessary for the processing purpose.",
+      "max_penalty": "Up to EUR 20,000,000 or 4% of total worldwide annual turnover, whichever is higher.",
+      "severity": "high"
+    },
+    "PII_OVEREXPOSED_IN_RESPONSE": {
+      "clause": "Article 5(1)(c)",
+      "title": "Data minimisation",
+      "summary": "Data minimisation",
+      "requirement": "Ensure personal data is adequate, relevant, and limited to what is necessary for the processing purpose.",
+      "max_penalty": "Up to EUR 20,000,000 or 4% of total worldwide annual turnover, whichever is higher.",
+      "severity": "high"
+    },
+    "MISSING_AUTH": {
+      "clause": "Article 25",
+      "title": "Data protection by design and by default",
+      "summary": "Data protection by design and by default",
+      "requirement": "Build controls that ensure only necessary personal data is processed and exposed by default.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "critical"
+    },
+    "THIRD_PARTY_PII_WITHOUT_CONSENT": {
+      "clause": "Article 6",
+      "title": "Lawfulness of processing",
+      "summary": "Lawfulness of processing",
+      "requirement": "Process or disclose personal data only when a valid lawful basis applies.",
+      "max_penalty": "Up to EUR 20,000,000 or 4% of total worldwide annual turnover, whichever is higher.",
+      "severity": "high"
+    },
+    "STACK_TRACE_LEAKAGE": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Prevent accidental disclosure of personal data or system details through appropriate security measures.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "high"
+    },
+    "ERROR_DISCLOSURE": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Prevent accidental disclosure of personal data or system details through appropriate security measures.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "high"
+    },
+    "MISSING_RETENTION_POLICY": {
+      "clause": "Article 5(1)(e)",
+      "title": "Storage limitation",
+      "summary": "Storage limitation",
+      "requirement": "Keep personal data in identifiable form only for as long as necessary for the processing purpose.",
+      "max_penalty": "Up to EUR 20,000,000 or 4% of total worldwide annual turnover, whichever is higher.",
+      "severity": "medium"
+    },
+    "MISSING_RETENTION_BOUNDARY": {
+      "clause": "Article 5(1)(e)",
+      "title": "Storage limitation",
+      "summary": "Storage limitation",
+      "requirement": "Keep personal data in identifiable form only for as long as necessary for the processing purpose.",
+      "max_penalty": "Up to EUR 20,000,000 or 4% of total worldwide annual turnover, whichever is higher.",
+      "severity": "medium"
+    },
+    "PERMISSIVE_CORS": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Apply technical controls that reduce unauthorised access and disclosure risk.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "medium"
+    },
+    "HARDCODED_SECRET": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Protect systems and credentials that secure personal data using appropriate technical controls.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "critical"
+    },
+    "SQL_INJECTION": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Protect processing systems from unauthorised access, disclosure, and compromise.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "critical"
+    },
+    "PLAINTEXT_PASSWORD_STORAGE": {
+      "clause": "Article 32",
+      "title": "Security of processing",
+      "summary": "Security of processing",
+      "requirement": "Protect credentials and personal data confidentiality with appropriate security measures.",
+      "max_penalty": "Up to EUR 10,000,000 or 2% of total worldwide annual turnover, whichever is higher.",
+      "severity": "critical"
+    }
+  }
+}

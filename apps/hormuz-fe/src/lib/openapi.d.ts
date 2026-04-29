@@ -46,12 +46,12 @@ export interface components {
         Finding: {
             /** Id */
             id: string;
+            /** Violation Type */
+            violation_type: string;
             /** Agent */
             agent: string;
             /** Category */
             category: string;
-            /** Violation Type */
-            violation_type: string;
             severity: components["schemas"]["Severity"];
             /** File Path */
             file_path: string;
@@ -67,6 +67,8 @@ export interface components {
             snippet?: string | null;
             /** Regulations */
             regulations?: components["schemas"]["RegulationRef"][];
+            /** Regulation Warning */
+            regulation_warning?: string | null;
             /** Recommendation */
             recommendation: string;
             /** Remediation Hint */
@@ -86,8 +88,15 @@ export interface components {
             framework: "GDPR" | "APP";
             /** Clause */
             clause: string;
+            /** Title */
+            title: string;
             /** Summary */
             summary: string;
+            /** Requirement */
+            requirement: string;
+            /** Max Penalty */
+            max_penalty: string;
+            severity: components["schemas"]["Severity"];
         };
         /** ScanRequest */
         ScanRequest: {

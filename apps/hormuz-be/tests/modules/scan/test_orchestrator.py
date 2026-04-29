@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from modules.scan.adapters.outbound.git_repository import GitRepositoryPreparer
+from modules.scan.application.regulation_mapper import attach_regulation_metadata
 from modules.scan.application.orchestrator import ScanOrchestrator
 from modules.scan.application.repositories import RepositoryPreparationError
 from modules.scan.application.rule_catalog import default_agents
@@ -112,6 +113,24 @@ async def test_orchestrator_finds_demo_target_violations(tmp_path: Path) -> None
         finding for finding in finding_events if finding["violation_type"] == MISSING_AUTH
     )
     assert missing_auth_event["context"] == missing_auth.context
+
+    findings_by_type = {finding.violation_type: finding for finding in summary.findings}
+    assert {regulation.framework for regulation in pii_log.regulations} == {"GDPR", "APP"}
+    assert pii_log.regulation_warning is None
+    assert _regulation(pii_log, "GDPR").clause == "Article 32"
+    assert _regulation(pii_log, "APP").clause == "APP 11"
+
+    overexposure_finding = findings_by_type[API_OVEREXPOSURE]
+    assert _regulation(overexposure_finding, "GDPR").clause == "Article 5(1)(c)"
+    assert _regulation(overexposure_finding, "APP").clause == "APP 3 and APP 6"
+
+    assert _regulation(missing_auth, "GDPR").clause == "Article 25"
+    assert _regulation(missing_auth, "APP").severity == Severity.CRITICAL
+
+    assert all(finding.regulations for finding in summary.findings)
+    assert all(finding.regulation_warning is None for finding in summary.findings)
+    assert all(finding["regulations"] for finding in finding_events)
+    assert all(finding["regulation_warning"] is None for finding in finding_events)
 
 
 @pytest.mark.asyncio
@@ -275,6 +294,37 @@ def test_default_agents_can_disable_auth_checker(monkeypatch: pytest.MonkeyPatch
     agents = default_agents()
 
     assert [agent.category for agent in agents] == ["pii", "api"]
+
+
+def test_regulation_mapper_keeps_unknown_violation_types_explicit() -> None:
+    finding = Finding(
+        id="UNKNOWN_VIOLATION:example.py:1",
+        violation_type="UNKNOWN_VIOLATION",
+        agent="Test",
+        category="test",
+        severity=Severity.LOW,
+        file_path="example.py",
+        line=1,
+        title="Unknown test finding",
+        description="A finding without a regulation mapping.",
+        recommendation="Add a mapping before surfacing this in production.",
+        remediation_hint="Add a mapping before surfacing this in production.",
+    )
+
+    mapped = attach_regulation_metadata(finding)
+
+    assert mapped.regulations == []
+    assert mapped.regulation_warning == (
+        "No regulation mapping found for violation type UNKNOWN_VIOLATION."
+    )
+
+
+def _regulation(finding: Finding, framework: str):
+    return next(
+        regulation
+        for regulation in finding.regulations
+        if regulation.framework == framework
+    )
 
 
 def _write_demo_fixture(repo_path: Path) -> None:

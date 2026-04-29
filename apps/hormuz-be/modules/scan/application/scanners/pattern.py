@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from modules.scan.application.scanners.base import BackendScannerAgent, SourceMatch
-from modules.scan.domain.entities import RegulationRef, Severity
+from modules.scan.domain.entities import Severity
 
 Predicate = Callable[[str, str, Path], bool]
 
@@ -16,7 +16,6 @@ class Rule:
     severity: Severity
     description: str
     recommendation: str
-    regulations: tuple[RegulationRef, ...]
     predicate: Predicate
     violation_type: str | None = None
 
@@ -40,7 +39,6 @@ class PatternScanAgent(BackendScannerAgent):
                     severity=rule.severity,
                     description=rule.description,
                     recommendation=rule.recommendation,
-                    regulations=rule.regulations,
                     file_path=file_path,
                     line=line_number,
                     snippet=line.strip(),

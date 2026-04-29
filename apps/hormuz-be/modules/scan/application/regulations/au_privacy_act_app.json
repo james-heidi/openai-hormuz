@@ -1,0 +1,109 @@
+{
+  "framework": "APP",
+  "mappings": {
+    "PII_IN_LOGS": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable steps to protect personal information from misuse, interference, loss, and unauthorised access, modification, or disclosure.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "critical"
+    },
+    "API_OVEREXPOSURE": {
+      "clause": "APP 3 and APP 6",
+      "title": "Collection, use, and disclosure of personal information",
+      "summary": "Collection, use, and disclosure",
+      "requirement": "Collect only reasonably necessary personal information and use or disclose it only for permitted purposes.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "high"
+    },
+    "PII_OVEREXPOSED_IN_RESPONSE": {
+      "clause": "APP 3 and APP 6",
+      "title": "Collection, use, and disclosure of personal information",
+      "summary": "Collection, use, and disclosure",
+      "requirement": "Collect only reasonably necessary personal information and use or disclose it only for permitted purposes.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "high"
+    },
+    "MISSING_AUTH": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable technical and organisational steps to prevent unauthorised access or disclosure of personal information.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "critical"
+    },
+    "THIRD_PARTY_PII_WITHOUT_CONSENT": {
+      "clause": "APP 6",
+      "title": "Use or disclosure of personal information",
+      "summary": "Use or disclosure",
+      "requirement": "Use or disclose personal information for a secondary purpose only with consent or another permitted basis.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "high"
+    },
+    "STACK_TRACE_LEAKAGE": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable steps to prevent unauthorised disclosure through error responses or diagnostic output.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "high"
+    },
+    "ERROR_DISCLOSURE": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable steps to prevent unauthorised disclosure through error responses or diagnostic output.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "high"
+    },
+    "MISSING_RETENTION_POLICY": {
+      "clause": "APP 11.2",
+      "title": "Destroy or de-identify unneeded personal information",
+      "summary": "Retention and destruction",
+      "requirement": "Take reasonable steps to destroy or de-identify personal information once it is no longer needed, unless retention is legally required.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "medium"
+    },
+    "MISSING_RETENTION_BOUNDARY": {
+      "clause": "APP 11.2",
+      "title": "Destroy or de-identify unneeded personal information",
+      "summary": "Retention and destruction",
+      "requirement": "Take reasonable steps to destroy or de-identify personal information once it is no longer needed, unless retention is legally required.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "medium"
+    },
+    "PERMISSIVE_CORS": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable technical steps to reduce unauthorised access or disclosure risk.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "medium"
+    },
+    "HARDCODED_SECRET": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable steps to protect systems and credentials that secure personal information.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "critical"
+    },
+    "SQL_INJECTION": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable steps to protect personal information from unauthorised access, modification, or disclosure.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "critical"
+    },
+    "PLAINTEXT_PASSWORD_STORAGE": {
+      "clause": "APP 11",
+      "title": "Security of personal information",
+      "summary": "Security of personal information",
+      "requirement": "Take reasonable steps to secure credentials and protect personal information from unauthorised access.",
+      "max_penalty": "For serious or repeated interferences with privacy: up to AUD 50,000,000, 3x benefit, or 30% adjusted turnover for a body corporate; AUD 2,500,000 for an individual.",
+      "severity": "critical"
+    }
+  }
+}
