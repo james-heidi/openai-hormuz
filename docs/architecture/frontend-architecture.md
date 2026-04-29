@@ -12,8 +12,8 @@ store when it crosses features.
 
 - Features map cleanly to backend bounded contexts.
 - TanStack Query avoids one-off loading, retry, and cache logic.
-- The structure is small enough for a hackathon while still matching the
-  `scribe-workspace` frontend habits.
+- The structure is small enough for a hackathon while keeping frontend code
+  aligned around feature boundaries.
 
 ## Feature Shape
 
@@ -35,4 +35,3 @@ src/features/<name>/
 - Non-page feature files should not import sibling feature internals.
 - Components do not fetch directly; they call feature hooks or receive props.
 - Global error handling belongs in `src/lib/queryClient.ts`.
-

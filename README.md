@@ -4,11 +4,10 @@ Compliance Codex is a hackathon project for scanning source code with parallel
 agent workers, mapping privacy/security findings to GDPR and Australian Privacy
 Principles, and preparing fix output for review.
 
-This repo is scaffolded as a small monorepo inspired by the mature
-[`scribe-workspace`](https://github.com/james-heidi/scribe-workspace.git)
-template: root Taskfile orchestration, `apps/*` services, uv for Python, pnpm
-for frontend, FastAPI module monolith, feature-sliced React, OpenAPI sync, and
-architecture notes under `docs/architecture/`.
+This repo is scaffolded as a small monorepo with root Taskfile orchestration,
+`apps/*` services, uv for Python, pnpm for frontend, FastAPI module monolith,
+feature-sliced React, OpenAPI sync, and architecture notes under
+`docs/architecture/`.
 
 ## Getting Started
 
@@ -44,7 +43,7 @@ openai-hormuz/
 │   └── hormuz-fe/        # Vite React frontend
 ├── demo_repo/            # Deterministic demo target with known violations
 ├── docs/
-│   └── architecture/     # ADRs copied forward from the scribe-workspace style
+│   └── architecture/     # ADRs for long-lived repo conventions
 ├── docker-compose.yml
 └── Taskfile.yml
 ```
@@ -60,4 +59,3 @@ openai-hormuz/
 The current backend uses deterministic rule scanners so the scaffold is
 demo-safe. The OpenAI Agents SDK integration point is the `ScanAgent` port in
 `apps/hormuz-be/modules/scan/domain/ports.py`.
-

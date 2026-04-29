@@ -1,6 +1,6 @@
 # Hormuz Frontend
 
-Vite + React frontend using feature-first structure from `scribe-workspace`.
+Vite + React frontend uses feature-first structure.
 
 ## Rules
 
@@ -10,4 +10,3 @@ Vite + React frontend using feature-first structure from `scribe-workspace`.
 - Keep feature code under `src/features/<name>`.
 - Do not import sibling feature internals from non-page files.
 - Keep shared UI and transport helpers under `src/components` and `src/lib`.
-

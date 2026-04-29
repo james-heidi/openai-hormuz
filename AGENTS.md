@@ -1,7 +1,7 @@
 # OpenAI Hormuz
 
-Compliance Codex monorepo scaffold. The project conventions are adapted from
-`scribe-workspace`, with Codex-oriented instructions in this file.
+Compliance Codex monorepo scaffold. The project conventions are documented
+here with Codex-oriented instructions for this repo.
 
 ## Rules
 
@@ -34,4 +34,3 @@ task be:test
 task fe:build
 task openapi:sync
 ```
-

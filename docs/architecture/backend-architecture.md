@@ -13,7 +13,7 @@ Run one FastAPI process in `apps/hormuz-be`, with each bounded context under
   service isolation.
 - The shape still leaves future extraction cheap because concrete adapters stay
   outside domain code.
-- It mirrors the `scribe-workspace` backend convention the team already knows.
+- It keeps backend conventions familiar without coupling domains to adapters.
 
 ## Module Shape
 
@@ -44,4 +44,3 @@ modules/<name>/
   computes the compliance score.
 - `shared`: reusable domain event and event bus primitives reserved for
   cross-context reactions.
-

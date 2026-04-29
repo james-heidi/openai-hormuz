@@ -1,6 +1,6 @@
 # Hormuz Backend
 
-FastAPI backend using the same module-monolith rules as `scribe-workspace`.
+FastAPI backend uses module-monolith rules.
 
 ## Rules
 
@@ -12,4 +12,3 @@ FastAPI backend using the same module-monolith rules as `scribe-workspace`.
 - Put orchestration in `application/` and transport details in
   `adapters/inbound`.
 - WebSocket and REST paths must share the same domain models.
-
