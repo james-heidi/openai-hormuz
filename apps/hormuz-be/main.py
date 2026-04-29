@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +10,7 @@ from infrastructure.observability.telemetry import setup_telemetry_providers
 
 setup_telemetry_providers()
 
+from infrastructure.config import get_backend_settings  # noqa: E402
 from infrastructure.di import wire_cross_module_events  # noqa: E402
 from infrastructure.health.router import router as health_router  # noqa: E402
 from infrastructure.observability.telemetry import instrument_app  # noqa: E402
@@ -24,8 +24,7 @@ async def lifespan(app: FastAPI):
 
 
 def _cors_origins() -> list[str]:
-    raw = os.environ.get("CORS_ORIGINS", "http://localhost:3000")
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return get_backend_settings().cors_origins
 
 
 app = FastAPI(title="Hormuz API", version="0.1.0", lifespan=lifespan)
@@ -42,4 +41,3 @@ instrument_app(app)
 
 app.include_router(health_router)
 app.include_router(scan_router)
-

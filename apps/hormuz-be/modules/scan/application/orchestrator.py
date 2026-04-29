@@ -1,7 +1,8 @@
 import asyncio
-import os
+from collections.abc import Sequence
 from itertools import chain
 from pathlib import Path
+from typing import Protocol
 
 from modules.scan.domain.entities import (
     AgentStatus,
@@ -11,8 +12,8 @@ from modules.scan.domain.entities import (
     ScanSummary,
     Severity,
 )
-from modules.scan.domain.ports import EventEmitter, ScanAgent
 from modules.scan.application.repositories import RepositoryPreparationError, RepositoryPreparer
+from modules.scan.domain.ports import EventEmitter, ScanAgent
 
 SEVERITY_WEIGHTS = {
     Severity.CRITICAL: 18,
@@ -22,13 +23,27 @@ SEVERITY_WEIGHTS = {
 }
 
 
+class ScanRuntimeSettings(Protocol):
+    scan_allowed_roots: Sequence[Path]
+
+    def validate_for_scan(self) -> None:
+        """Raise when required scan-time configuration is missing."""
+
+
 class ScanOrchestrator:
-    def __init__(self, agents: list[ScanAgent], repository_preparer: RepositoryPreparer) -> None:
+    def __init__(
+        self,
+        agents: list[ScanAgent],
+        repository_preparer: RepositoryPreparer,
+        settings: ScanRuntimeSettings,
+    ) -> None:
         self._agents = agents
         self._repository_preparer = repository_preparer
+        self._settings = settings
 
     async def run(self, request: ScanRequest, emit: EventEmitter) -> ScanSummary:
-        source = _validate_scan_source(request.repo_path)
+        self._settings.validate_for_scan()
+        source = _validate_scan_source(request.repo_path, self._settings.scan_allowed_roots)
 
         await emit(
             {
@@ -90,11 +105,7 @@ def _score(findings: list[Finding]) -> int:
     return max(0, 100 - penalty)
 
 
-def _is_allowed_scan_root(repo_path: Path) -> bool:
-    return any(_is_relative_to(repo_path, root) for root in _allowed_scan_roots())
-
-
-def _validate_scan_source(source: str) -> str:
+def _validate_scan_source(source: str, allowed_roots: Sequence[Path]) -> str:
     source = source.strip()
     if not source:
         raise RepositoryPreparationError("invalid_repo_source", "The repository source is empty.")
@@ -107,7 +118,7 @@ def _validate_scan_source(source: str) -> str:
                 "invalid_repo_path",
                 "The repository path does not exist or is not a directory.",
             )
-        if not _is_allowed_scan_root(repo_path):
+        if not _is_allowed_scan_root(repo_path, allowed_roots):
             raise RepositoryPreparationError(
                 "invalid_repo_path",
                 "The repository path is outside the configured scan roots.",
@@ -117,15 +128,8 @@ def _validate_scan_source(source: str) -> str:
     return source
 
 
-def _allowed_scan_roots() -> list[Path]:
-    configured = os.environ.get("SCAN_ALLOWED_ROOTS")
-    if configured:
-        return [
-            Path(root).expanduser().resolve()
-            for root in configured.split(os.pathsep)
-            if root.strip()
-        ]
-    return [Path(__file__).resolve().parents[5]]
+def _is_allowed_scan_root(repo_path: Path, allowed_roots: Sequence[Path]) -> bool:
+    return any(_is_relative_to(repo_path, root) for root in allowed_roots)
 
 
 def _is_relative_to(path: Path, root: Path) -> bool:
